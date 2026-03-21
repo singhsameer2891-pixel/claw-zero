@@ -9,7 +9,13 @@ const PORT = 3845;
 
 /** Pulls the OpenClaw container image; returns the pulled image size. */
 export async function pullContainerImage(): Promise<{ size: string }> {
-  await execa('docker', ['pull', IMAGE], { stdio: 'inherit' });
+  try {
+    await execa('docker', ['pull', IMAGE], { stdio: 'pipe', timeout: 600_000 });
+  } catch (err: unknown) {
+    const stderr = (err as { stderr?: string }).stderr ?? '';
+    const lastLine = stderr.trim().split('\n').pop() ?? 'docker pull failed';
+    throw new Error(lastLine);
+  }
 
   // Get image size after pull
   const { stdout } = await execa('docker', [
@@ -35,20 +41,27 @@ export async function launchContainer(
   apiKey: string,
   _profileKey: SecurityProfileKey
 ): Promise<{ port: number }> {
-  await execa(
-    'docker',
-    [
-      'run',
-      '--detach',
-      '--rm',
-      '--name', 'openclaw_sandbox',
-      '--publish', `${PORT}:${PORT}`,
-      '--volume', `${WORKSPACE_PATH}:/workspace`,
-      '--env', `ANTHROPIC_API_KEY=${apiKey}`,
-      IMAGE,
-    ],
-    { stdio: 'ignore' }
-  );
+  try {
+    await execa(
+      'docker',
+      [
+        'run',
+        '--detach',
+        '--rm',
+        '--name', 'openclaw_sandbox',
+        '--publish', `${PORT}:${PORT}`,
+        '--volume', `${WORKSPACE_PATH}:/workspace`,
+        '--env', `ANTHROPIC_API_KEY=${apiKey}`,
+        IMAGE,
+      ],
+      { stdio: 'ignore', timeout: 30_000 }
+    );
+  } catch (err: unknown) {
+    if ((err as { timedOut?: boolean }).timedOut) {
+      throw new Error('docker run timed out after 30s — check your internet connection');
+    }
+    throw err;
+  }
 
   return { port: PORT };
 }

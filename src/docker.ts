@@ -1,7 +1,13 @@
 import { execa } from 'execa';
+import { existsSync } from 'node:fs';
 
-/** Silent check — returns true if docker CLI is available. */
+/**
+ * Returns true if Docker Desktop is installed OR the docker CLI responds.
+ * Checks /Applications/Docker.app first (covers the installed-but-not-launched case)
+ * before falling back to `docker --version`.
+ */
 export async function checkDocker(): Promise<boolean> {
+  if (existsSync('/Applications/Docker.app')) return true;
   try {
     await execa('docker', ['--version']);
     return true;
@@ -10,9 +16,15 @@ export async function checkDocker(): Promise<boolean> {
   }
 }
 
-/** Install Docker Desktop via Homebrew Cask. */
+/** Install Docker Desktop via Homebrew Cask. Captures output — does not bleed into Listr spinner. */
 export async function installDocker(): Promise<void> {
-  await execa('brew', ['install', '--cask', 'docker'], { stdio: 'inherit' });
+  try {
+    await execa('brew', ['install', '--cask', 'docker'], { stdio: 'pipe', timeout: 600_000 });
+  } catch (err: unknown) {
+    const stderr = (err as { stderr?: string }).stderr ?? '';
+    const lastLine = stderr.trim().split('\n').pop() ?? 'brew install failed';
+    throw new Error(lastLine);
+  }
 }
 
 /** Open Docker.app and poll `docker info` until daemon is ready (max 60s). */
@@ -41,5 +53,5 @@ export async function startDockerDaemon(): Promise<void> {
     }
   }
 
-  throw new Error('Docker daemon did not start within 60 seconds.');
+  throw new Error('open -a Docker timed out after 60s — check your internet connection');
 }

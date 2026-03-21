@@ -84,6 +84,22 @@
 
 ---
 
+## GROUP 8: Reliability & Pre-flight Checks ✅ DONE
+**Depends on:** GROUP 5
+**Summary:** Fix the Docker detection bug, silence brew/pull output bleed, add a download manifest with user confirmation, internet speed check with time estimates, per-operation timeouts to prevent hangs, and a session log file.
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 8.1 | Fix `checkDocker()` in `src/docker.ts` — check `/Applications/Docker.app` existence (via `fs.existsSync`) first; fall back to `docker --version`; return `true` if either passes. Only run `installDocker()` if both fail. [PARALLEL with 8.2] | ✅ | |
+| 8.2 | Fix `stdio: 'inherit'` on `brew install --cask docker` and `docker pull` — change to `stdio: 'pipe'`; capture stderr; on failure throw with trimmed last stderr line as message. [PARALLEL with 8.1] | ✅ | |
+| 8.3 | Implement `checkInternetSpeed()` in `src/network.ts` — download 10 MB from Cloudflare, measure wall-clock MB/s; set 15s AbortSignal timeout; return `{ mbps: number }` | ✅ | |
+| 8.4 | Implement `buildDownloadManifest()` + `formatManifestTable()` in `src/network.ts` | ✅ | |
+| 8.5 | Wire pre-flight gate into `src/index.ts` — docker check → speed check → manifest table → slow-speed warning → confirm prompt | ✅ | |
+| 8.6 | Add `timeout` to all `execa` calls — `brew install`: 600 000 ms, `docker pull`: 600 000 ms, `docker run`: 30 000 ms; formatted timeout error messages | ✅ | |
+| 8.7 | Implement session log file in `src/logger.ts` — `initLog()`, `log()`, `getLogPath()`; wired at each Listr task start/success/failure; log path shown on failure | ✅ | |
+
+---
+
 ## GROUP 7: npm Publishing Setup ✅ DONE
 **Depends on:** GROUP 6
 **Summary:** Configure the project so users can run `npx claw-zero@latest` — add shebang, bin field, files list, and prepublishOnly build script.

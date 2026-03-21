@@ -9,6 +9,8 @@ import { execa } from 'execa';
 import { checkDocker, installDocker, startDockerDaemon } from './docker.js';
 import { createWorkspace } from './workspace.js';
 import { pullContainerImage, launchContainer } from './container.js';
+import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
+import { initLog, log, getLogPath } from './logger.js';
 
 /** Formats API key for inline confirmation: first 7 + last 4 chars. */
 function maskApiKey(key: string): string {
@@ -88,6 +90,46 @@ async function main() {
   console.log(highlightJson(selectedProfile.config));
   console.log();
 
+  // ── 8.5 Pre-flight gate ──────────────────────────────────────────────────────
+  const dockerInstalled = await checkDocker();
+
+  let speedMbps = 0;
+  try {
+    process.stdout.write(pc.dim('  Measuring download speed...'));
+    const speedResult = await checkInternetSpeed();
+    speedMbps = speedResult.mbps;
+    process.stdout.write(`\r${' '.repeat(40)}\r`); // clear the line
+  } catch {
+    process.stdout.write(`\r${' '.repeat(40)}\r`);
+    // Non-fatal — proceed without estimate
+  }
+
+  const manifest = buildDownloadManifest(dockerInstalled);
+
+  if (manifest.length > 0) {
+    const table = formatManifestTable(manifest, speedMbps);
+    console.log(`\n${pc.dim('◇')} ${pc.bold('Download plan')}`);
+    console.log(pc.dim(table));
+    console.log();
+
+    if (speedMbps > 0 && speedMbps < 10) {
+      console.log(
+        pc.yellow(`  ⚠  Slow connection detected (${speedMbps.toFixed(1)} MB/s). Downloads may take a while.`)
+      );
+      console.log();
+    }
+
+    const proceed = await p.confirm({ message: 'Proceed with download?' });
+    if (p.isCancel(proceed) || !proceed) {
+      p.cancel('Setup cancelled.');
+      process.exit(0);
+    }
+  }
+
+  // Initialise session log (workspace may not exist yet — logger handles mkdir)
+  const logFilePath = initLog();
+  log('INFO', `Profile selected: ${profileKey as string}`);
+
   // ── 3.6 Sequential install checklist (listr2) ───────────────────────────────
   let dockerVersion = 'Docker';
   let imageSize = '1.2 GB';
@@ -98,10 +140,12 @@ async function main() {
       {
         title: 'Checking Docker daemon...',
         task: async (_, task) => {
-          const installed = await checkDocker();
-          if (!installed) {
+          log('INFO', 'Task 1 start: Docker check');
+          if (!dockerInstalled) {
             task.title = 'Installing Docker via Homebrew...';
+            log('INFO', 'Docker not found — starting Homebrew install');
             await installDocker();
+            log('INFO', 'Docker installed via Homebrew');
           }
           await startDockerDaemon();
           try {
@@ -110,36 +154,45 @@ async function main() {
           } catch {
             // version string is cosmetic — don't block
           }
+          log('INFO', `Task 1 done: ${dockerVersion} running`);
           task.title = pc.dim(`✔ ${dockerVersion} is running`);
         },
       },
       {
         title: 'Creating workspace directory...',
         task: async (_, task) => {
+          log('INFO', 'Task 2 start: create workspace');
           await createWorkspace();
+          log('INFO', `Task 2 done: workspace at ${WORKSPACE_PATH}`);
           task.title = pc.dim(`✔ Workspace ready at ${WORKSPACE_PATH}`);
         },
       },
       {
         title: 'Writing clawdbot.json...',
         task: async (_, task) => {
+          log('INFO', 'Task 3 start: write clawdbot.json');
           await generateConfig(profileKey as SecurityProfileKey, apiKey as string);
+          log('INFO', 'Task 3 done: clawdbot.json written');
           task.title = pc.dim('✔ clawdbot.json written');
         },
       },
       {
         title: 'Pulling OpenClaw container image...',
         task: async (_, task) => {
+          log('INFO', 'Task 4 start: docker pull');
           const result = await pullContainerImage();
           imageSize = result.size;
+          log('INFO', `Task 4 done: image pulled (${imageSize})`);
           task.title = pc.dim(`✔ Image pulled (${imageSize})`);
         },
       },
       {
         title: 'Booting container...',
         task: async (_, task) => {
+          log('INFO', 'Task 5 start: docker run');
           const result = await launchContainer(apiKey as string, profileKey as SecurityProfileKey);
           containerPort = result.port;
+          log('INFO', `Task 5 done: container live on port ${containerPort}`);
           task.title = pc.dim(`✔ Container live on port ${containerPort}`);
         },
       },
@@ -152,7 +205,11 @@ async function main() {
   try {
     await tasks.run();
   } catch (err) {
-    p.cancel(`Setup failed: ${(err as Error).message}`);
+    const message = (err as Error).message;
+    log('ERROR', `Setup failed: ${message}`);
+    const lp = getLogPath();
+    const logHint = lp ? `\n  Log: ${lp}` : '';
+    p.cancel(`Setup failed: ${message}${logHint}`);
     process.exit(1);
   }
 
@@ -171,6 +228,10 @@ async function main() {
 }
 
 main().catch((err) => {
-  p.cancel(`Unexpected error: ${(err as Error).message}`);
+  const message = (err as Error).message;
+  log('ERROR', `Unexpected error: ${message}`);
+  const lp = getLogPath();
+  const logHint = lp ? `\n  Log: ${lp}` : '';
+  p.cancel(`Unexpected error: ${message}${logHint}`);
   process.exit(1);
 });
