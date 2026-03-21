@@ -7,8 +7,7 @@ const CONTAINER_NAME = 'openclaw_sandbox';
 
 const WORKSPACE_PATH = join(homedir(), 'Desktop', 'OpenClaw_Workspace');
 const IMAGE = 'ghcr.io/openclaw/openclaw:latest';
-const GATEWAY_PORT = 18789; // Control UI + WebSocket gateway
-const EXPOSED_PORT = 3845;  // Image's declared EXPOSE (kept for compatibility)
+const GATEWAY_PORT = 18789; // Serves the canvas UI (/__openclaw__/canvas/) + WebSocket gateway
 
 /** Pulls the OpenClaw container image; returns the pulled image size. */
 export async function pullContainerImage(): Promise<{ size: string }> {
@@ -56,7 +55,6 @@ export async function launchContainer(
         '--rm',
         '--name', CONTAINER_NAME,
         '--publish', `${GATEWAY_PORT}:${GATEWAY_PORT}`,
-        '--publish', `${EXPOSED_PORT}:${EXPOSED_PORT}`,
         '--volume', `${WORKSPACE_PATH}:/workspace`,
         '--env', `ANTHROPIC_API_KEY=${apiKey}`,
         IMAGE,

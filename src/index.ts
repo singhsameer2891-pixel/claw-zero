@@ -294,7 +294,7 @@ async function main() {
   // ── 3.6 Sequential install checklist (listr2) ───────────────────────────────
   let dockerVersion = 'Docker';
   let imageSize = '1.2 GB';
-  let containerPort = 3845;
+  let containerPort = 18789;
 
   const tasks = new Listr(
     [
@@ -389,15 +389,15 @@ async function main() {
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  Workspace  →  ${pc.cyan(WORKSPACE_PATH)}`,
     `  ${pc.dim('│')}  Profile    →  ${pc.yellow(selectedProfile.label)}`,
-    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(`http://127.0.0.1:${containerPort}/`)}`,
+    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)}`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
-    `  ${pc.dim('│')}    1. Open ${pc.cyan(`http://127.0.0.1:${containerPort}/`)} in your browser`,
+    `  ${pc.dim('│')}    1. Open ${pc.cyan(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)} in your browser`,
     `  ${pc.dim('│')}    2. Paste your ${pc.yellow('gateway token')} into Settings to authenticate`,
     `  ${pc.dim('│')}       (run ${pc.dim('docker logs openclaw_sandbox')} to find it)`,
     `  ${pc.dim('│')}    3. Drop files into the workspace folder to share with the agent`,
     `  ${pc.dim('│')}`,
-    `  ${pc.dim('│')}  Health check: ${pc.dim(`http://127.0.0.1:${containerPort}/readyz`)}`,
+    `  ${pc.dim('│')}  Health check: ${pc.dim(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)}`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);

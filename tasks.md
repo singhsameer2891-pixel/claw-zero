@@ -134,3 +134,16 @@
 |----|------|--------|-------|
 | 10.1 | In `src/container.ts`: before `docker run`, silently run `docker rm -f openclaw_sandbox`; ignore errors (container may not exist); proceed to run | ✅ | Fixes exit code 125 on name conflict without user intervention |
 | 10.2 | In `src/container.ts`: wrap the `docker run` execa call in a try/catch; if it throws, replace any occurrence of the API key value in the error message string with `sk-***` before rethrowing | ✅ | Prevents full key exposure in error output and logs |
+
+---
+
+## GROUP 11: Fix Canvas URL & Port Cleanup ✅ DONE
+**Depends on:** GROUP 10
+**Summary:** Correct the outro and next-steps to point to the real canvas path (`/__openclaw__/canvas/`); remove the unused port 3845 publish from docker run.
+
+**RCA:** Gateway listens on `ws://127.0.0.1:18789` (WebSocket); canvas UI is served at HTTP sub-path `/__openclaw__/canvas/`. Outro was pointing to the bare root which browsers cannot render. Port 3845 is not used by the image (no log entry).
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 11.1 | In `src/container.ts`: remove `--publish 3845:3845` from the `docker run` args; update `GATEWAY_PORT` comment to clarify it also serves the canvas HTTP path | ✅ | Port 3845 unused per container logs |
+| 11.2 | In `src/index.ts`: update all references to the OpenClaw URL — replace `http://127.0.0.1:18789/` with `http://127.0.0.1:18789/__openclaw__/canvas/`; update health check URL to `http://127.0.0.1:18789/__openclaw__/canvas/` | ✅ | Affects outro box + next-steps list |
