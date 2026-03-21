@@ -44,6 +44,9 @@ export async function launchContainer(
   apiKey: string,
   _profileKey: SecurityProfileKey
 ): Promise<{ port: number }> {
+  // Silently remove any stale container with the same name (exit code 125 conflict fix)
+  await execa('docker', ['rm', '-f', CONTAINER_NAME], { stdio: 'pipe' }).catch(() => {});
+
   try {
     await execa(
       'docker',
@@ -64,7 +67,10 @@ export async function launchContainer(
     if ((err as { timedOut?: boolean }).timedOut) {
       throw new Error('docker run timed out after 30s — check your internet connection');
     }
-    throw err;
+    // Mask API key in any error message before rethrowing
+    const raw = err instanceof Error ? err.message : String(err);
+    const masked = raw.replaceAll(apiKey, 'sk-***');
+    throw new Error(masked);
   }
 
   return { port: GATEWAY_PORT };

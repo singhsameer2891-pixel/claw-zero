@@ -123,3 +123,14 @@
 | 9.3 | Harden error output: all catch blocks write full stack to session log only; user sees 1-line message + log path; remove any raw error surfacing | ✅ | Added `logError()` to logger.ts; all catch blocks use it; only first line of message shown to user |
 | 9.4 | Add settings review + change menu to outro: display a summary table of the active profile's config values; offer `p.select` "Would you like to change any settings?" → if yes, show each setting as a selectable item → allow value change → rewrite `clawdbot.json` + restart container | ✅ | `settingsReview()` function in index.ts; `generateConfig()` updated to accept override config; `stopContainer()` added to container.ts |
 | 9.5 | Rewrite outro success banner: clear success visual, ordered next-steps list based on correct access method (from 9.2), workspace path, profile summary | ✅ | Shows `http://127.0.0.1:18789/`, gateway token auth steps, workspace path, health check URL |
+
+---
+
+## GROUP 10: Container Boot Resilience ✅ DONE
+**Depends on:** GROUP 9
+**Summary:** Automatically handle stale container conflicts before booting, and mask the API key in all error output so it is never exposed to the user.
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 10.1 | In `src/container.ts`: before `docker run`, silently run `docker rm -f openclaw_sandbox`; ignore errors (container may not exist); proceed to run | ✅ | Fixes exit code 125 on name conflict without user intervention |
+| 10.2 | In `src/container.ts`: wrap the `docker run` execa call in a try/catch; if it throws, replace any occurrence of the API key value in the error message string with `sk-***` before rethrowing | ✅ | Prevents full key exposure in error output and logs |
