@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0a;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+  .window {
+    width: 100%;
+    max-width: 680px;
+    background: #111;
+    border-radius: 10px;
+    border: 1px solid #2a2a2a;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+  }
+  .titlebar {
+    background: #1c1c1c;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .tl { color: #555; font-size: 11px; margin: 0 auto; }
+  .terminal { padding: 20px 22px; min-height: 360px; }
+  .line { margin-bottom: 2px; line-height: 1.75; white-space: pre-wrap; word-break: break-all; }
+  .cyan { color: #00d4e8; } .green { color: #4ade80; } .dim { color: #555; }
+  .white { color: #e8e8e8; } .yellow { color: #fbbf24; } .red { color: #f87171; }
+  .bg-cyan { background: #00d4e8; color: #000; padding: 1px 6px; border-radius: 2px; font-weight: bold; }
+  .key { color: #7dd3fc; } .str { color: #86efac; } .num { color: #c084fc; }
+
+  .input-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .fake-input {
+    background: transparent; border: none; border-bottom: 1px solid #444;
+    color: #e8e8e8; font-family: inherit; font-size: 13px; outline: none;
+    width: 240px; padding: 2px 4px;
+  }
+  .fake-input:focus { border-bottom-color: #00d4e8; }
+  .fake-input::placeholder { color: #333; }
+  .enter-btn {
+    background: #00d4e8; color: #000; border: none; font-family: inherit;
+    font-size: 11px; font-weight: bold; padding: 3px 10px; border-radius: 3px;
+    cursor: pointer; letter-spacing: 0.5px;
+  }
+  .enter-btn:hover { background: #00bdd4; }
+
+  .opt {
+    display: flex; align-items: center; gap: 10px; padding: 5px 8px;
+    border-radius: 4px; cursor: pointer; margin: 2px 0;
+    transition: background 0.1s; color: #777; user-select: none;
+  }
+  .opt:hover { background: #1e1e1e; color: #e8e8e8; }
+  .opt.active { color: #e8e8e8; background: #1a1a1a; }
+  .radio { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #444; flex-shrink: 0; transition: all 0.15s; }
+  .opt.active .radio { border-color: #00d4e8; background: #00d4e8; }
+  .hint { color: #444; font-size: 11px; }
+  .opt.active .hint { color: #555; }
+
+  .step-btn {
+    margin-top: 10px; background: #1a1a1a; border: 1px solid #333;
+    color: #00d4e8; font-family: inherit; font-size: 12px;
+    padding: 5px 14px; border-radius: 4px; cursor: pointer;
+  }
+  .step-btn:hover { background: #222; border-color: #00d4e8; }
+
+  .config-block {
+    background: #0d0d0d; border: 1px solid #1e1e1e; border-radius: 5px;
+    padding: 10px 14px; margin: 6px 0; color: #aaa; font-size: 12px; line-height: 1.85;
+  }
+  .task-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .spin-el { color: #00d4e8; display: inline-block; width: 14px; }
+  @keyframes spinChar {
+    0%{content:'⠋'} 12%{content:'⠙'} 25%{content:'⠹'} 37%{content:'⠸'}
+    50%{content:'⠼'} 62%{content:'⠴'} 75%{content:'⠦'} 87%{content:'⠧'}
+  }
+  .spin-el.spinning::before { content: '⠋'; animation: spinChar 0.8s steps(1) infinite; color: #00d4e8; }
+
+  .outro-box {
+    border-left: 2px solid #1e1e1e; padding: 10px 14px; margin: 8px 0;
+    color: #666; font-size: 12px; line-height: 2;
+  }
+  .reset-btn {
+    background: transparent; border: 1px solid #2a2a2a; color: #444;
+    font-family: inherit; font-size: 11px; padding: 4px 12px;
+    border-radius: 4px; cursor: pointer; margin-top: 12px; display: inline-block;
+  }
+  .reset-btn:hover { color: #aaa; border-color: #555; }
+  .hidden { display: none !important; }
+  .section { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+    <span class="tl">zsh — ~/Desktop — 80×28</span>
+  </div>
+  <div class="terminal" id="terminal">
+
+    <div class="section" id="s-intro">
+      <div class="line dim">──────────────────────────────────────────────────────────</div>
+      <div class="line">&nbsp; <span class="bg-cyan">🦞 ONE-CLICK CLAW</span> &nbsp;<span class="dim">Secure Local Sandbox</span></div>
+      <div class="line dim">──────────────────────────────────────────────────────────</div>
+      <div class="line">&nbsp;</div>
+    </div>
+
+    <div class="section" id="s-api">
+      <div class="line"><span class="cyan">◆</span> <span class="white">Paste your Anthropic or OpenAI API Key</span></div>
+      <div id="api-row" class="input-row">
+        <span class="cyan">›</span>
+        <input id="api-in" class="fake-input" type="password" placeholder="sk-ant-api03-••••••••" autocomplete="off" />
+        <button class="enter-btn" onclick="doApiKey()">ENTER ↵</button>
+      </div>
+      <div id="api-done" class="line hidden"></div>
+    </div>
+
+    <div class="section hidden" id="s-profile">
+      <div class="line">&nbsp;</div>
+      <div class="line"><span class="cyan">◆</span> <span class="white">Select your security profile</span></div>
+      <div id="profile-opts">
+        <div class="opt" id="o-fort_knox" onclick="pick('fort_knox')"><div class="radio"></div><span>Fort Knox</span><span class="hint">&nbsp; Super strict. Read-only.</span></div>
+        <div class="opt active" id="o-pragmatic" onclick="pick('pragmatic')"><div class="radio"></div><span>The Pragmatic PM</span><span class="hint">&nbsp; Recommended. Scoped access.</span></div>
+        <div class="opt" id="o-cowboy" onclick="pick('cowboy')"><div class="radio"></div><span>Cowboy Coder</span><span class="hint">&nbsp; Lenient. Proceed with caution.</span></div>
+        <div class="opt" id="o-yolo" onclick="pick('yolo')"><div class="radio"></div><span>YOLO Mode</span><span class="hint">&nbsp; Unrestricted. Good luck.</span></div>
+      </div>
+      <button class="step-btn" id="profile-btn" onclick="doProfile()">Confirm Profile ↵</button>
+      <div id="profile-done" class="line hidden"></div>
+    </div>
+
+    <div class="section hidden" id="s-config">
+      <div class="line">&nbsp;</div>
+      <div class="line"><span class="dim">◇ Generating</span> <span class="cyan">clawdbot.json</span></div>
+      <div id="config-out" class="config-block"></div>
+    </div>
+
+    <div class="section hidden" id="s-install">
+      <div class="line">&nbsp;</div>
+      <div id="t1" class="task-row"><span class="spin-el spinning"></span><span class="white">Checking Docker daemon...</span></div>
+      <div id="t2" class="task-row hidden"><span class="spin-el spinning"></span><span class="white">Creating ~/Desktop/OpenClaw_Workspace...</span></div>
+      <div id="t3" class="task-row hidden"><span class="spin-el spinning"></span><span class="white">Writing clawdbot.json to workspace...</span></div>
+      <div id="t4" class="task-row hidden"><span class="spin-el spinning"></span><span class="white">Pulling openclaw-sandbox:latest...</span></div>
+      <div id="t5" class="task-row hidden"><span class="spin-el spinning"></span><span class="white">Booting sandbox container...</span></div>
+    </div>
+
+    <div class="section hidden" id="s-outro">
+      <div class="line">&nbsp;</div>
+      <div class="line"><span class="green">✔</span> <span class="white">Sandbox successfully booted!</span></div>
+      <div class="outro-box">
+        <div>Hang tight! Pouring some coffee for your new AI intern ☕</div>
+        <div>Drop files into <span class="cyan">~/Desktop/OpenClaw_Workspace</span> to begin.</div>
+        <div class="dim">Container &nbsp;&nbsp;<span style="color:#aaa">openclaw-sandbox:latest → localhost:3845</span></div>
+        <div class="dim">Profile &nbsp;&nbsp;&nbsp;&nbsp;<span id="outro-p" class="yellow"></span></div>
+      </div>
+      <button class="reset-btn" onclick="reset()">↺ &nbsp;Run demo again</button>
+    </div>
+
+  </div>
+</div>
+<script>
+let sel = 'pragmatic';
+const P = {
+  fort_knox:{ label:'Fort Knox', mode:'"all"', ws:'"ro"', approval:'"*"', trust:'"none"', budget:'100000' },
+  pragmatic:{ label:'Pragmatic PM', mode:'"non-main"', ws:'"scoped"', approval:'["rm","sudo","curl","wget"]', trust:'"verified_only"', budget:'500000' },
+  cowboy:{ label:'Cowboy Coder', mode:'"off"', ws:'"scoped"', approval:'["sudo","rm -rf"]', trust:'"all"', budget:'2000000' },
+  yolo:{ label:'YOLO Mode', mode:'"off"', ws:'"rw"', approval:'[]', trust:'"all"', budget:'0' }
+};
+
+function pick(v) {
+  sel = v;
+  ['fort_knox','pragmatic','cowboy','yolo'].forEach(k => {
+    document.getElementById('o-'+k).classList.toggle('active', k===v);
+  });
+}
+
+function doApiKey() {
+  const v = document.getElementById('api-in').value;
+  if (!v || v.length < 8) { document.getElementById('api-in').style.borderBottomColor='#f87171'; return; }
+  document.getElementById('api-row').classList.add('hidden');
+  const m = v.slice(0,7)+'••••••••'+v.slice(-4);
+  const d = document.getElementById('api-done');
+  d.classList.remove('hidden');
+  d.innerHTML = `<span class="cyan">◆</span> <span class="dim">API Key &nbsp;</span><span class="green">✓ </span><span class="dim">${m}</span>`;
+  document.getElementById('s-profile').classList.remove('hidden');
+  pick('pragmatic');
+}
+
+document.getElementById('api-in').addEventListener('keydown', e => { if(e.key==='Enter') doApiKey(); });
+
+function doProfile() {
+  document.getElementById('profile-opts').classList.add('hidden');
+  document.getElementById('profile-btn').classList.add('hidden');
+  const p = P[sel];
+  const d = document.getElementById('profile-done');
+  d.classList.remove('hidden');
+  d.innerHTML = `<span class="cyan">◆</span> <span class="dim">Profile &nbsp;</span><span class="yellow">${p.label}</span>`;
+  document.getElementById('s-config').classList.remove('hidden');
+  document.getElementById('config-out').innerHTML =
+    `{<br>&nbsp;&nbsp;<span class="key">"sandbox"</span>: {<br>` +
+    `&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"mode"</span>: <span class="str">${p.mode}</span>,<br>` +
+    `&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"workspaceAccess"</span>: <span class="str">${p.ws}</span>,<br>` +
+    `&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"require_human_approval"</span>: <span class="str">${p.approval}</span>,<br>` +
+    `&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"skill_registry_trust"</span>: <span class="str">${p.trust}</span>,<br>` +
+    `&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"max_budget"</span>: <span class="num">${p.budget}</span><br>` +
+    `&nbsp;&nbsp;}<br>}`;
+  setTimeout(runInstall, 700);
+}
+
+async function runInstall() {
+  document.getElementById('s-install').classList.remove('hidden');
+  const steps = [
+    ['t1', 1300, '<span class="green">✔</span> <span class="dim">Docker daemon &nbsp; running (v25.0.3)</span>'],
+    ['t2', 900,  '<span class="green">✔</span> <span class="dim">Workspace created &nbsp; ~/Desktop/OpenClaw_Workspace</span>'],
+    ['t3', 700,  '<span class="green">✔</span> <span class="dim">clawdbot.json written</span>'],
+    ['t4', 2400, '<span class="green">✔</span> <span class="dim">Image pulled &nbsp; openclaw-sandbox:latest (312 MB)</span>'],
+    ['t5', 1100, '<span class="green">✔</span> <span class="dim">Container booted &nbsp; → localhost:3845</span>'],
+  ];
+  for (let i=0; i<steps.length; i++) {
+    const [id, ms, html] = steps[i];
+    const el = document.getElementById(id);
+    el.classList.remove('hidden');
+    scroll();
+    await wait(ms);
+    el.innerHTML = html;
+    scroll();
+  }
+  document.getElementById('outro-p').textContent = P[sel].label;
+  document.getElementById('s-outro').classList.remove('hidden');
+  scroll();
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+function scroll() { const t=document.getElementById('terminal'); t.scrollTop=t.scrollHeight; }
+
+function reset() {
+  ['s-profile','s-config','s-install','s-outro'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('api-row').classList.remove('hidden');
+  document.getElementById('api-done').classList.add('hidden');
+  document.getElementById('api-in').value='';
+  document.getElementById('api-in').style.borderBottomColor='#444';
+  document.getElementById('profile-done').classList.add('hidden');
+  document.getElementById('profile-opts').classList.remove('hidden');
+  document.getElementById('profile-btn').classList.remove('hidden');
+  ['t2','t3','t4','t5'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  const orig = {
+    t1:'Checking Docker daemon...',t2:'Creating ~/Desktop/OpenClaw_Workspace...',
+    t3:'Writing clawdbot.json to workspace...',t4:'Pulling openclaw-sandbox:latest...',
+    t5:'Booting sandbox container...'
+  };
+  Object.entries(orig).forEach(([id,msg]) => {
+    document.getElementById(id).innerHTML = `<span class="spin-el spinning"></span><span class="white">${msg}</span>`;
+  });
+  pick('pragmatic');
+}
+</script>
+</body>
+</html>
