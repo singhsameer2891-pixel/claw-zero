@@ -109,3 +109,17 @@
 | 7.1 | Add `#!/usr/bin/env node` shebang to `src/index.ts` | ✅ | Already present from GROUP 5 |
 | 7.2 | Update `package.json`: add `"bin"`, `"files"`, update `"main"` to `dist/index.js`, add `"prepublishOnly": "npm run build"` | ✅ | Already present from GROUP 5 |
 | 7.3 | Run `npm run build` and verify `dist/index.js` has shebang and is executable | ✅ | Build clean; shebang on line 1; chmod +x applied |
+
+---
+
+## GROUP 9: UX Hardening & Post-Install Guidance ✅ DONE
+**Depends on:** GROUP 8
+**Summary:** Fix Docker daemon wait flow with user pause, investigate correct OpenClaw access method, harden error surfacing, add settings review + change menu in outro.
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 9.1 | Rewrite Docker daemon wait: after launching Docker.app, show `p.note()` telling user to complete sign-in/registration + enable Docker; show `p.confirm` "Press Enter when Docker is ready"; then poll `docker info` (30s timeout) | ✅ | Added `isDaemonRunning()`, `launchDockerApp()`, `pollDaemonReady()` to docker.ts; UI handled in index.ts pre-flight |
+| 9.2 | Investigate how OpenClaw is accessed post-container — correct URL is `http://127.0.0.1:18789/` (gateway port); updated container.ts to publish 18789:18789 + 3845:3845; outro updated accordingly | ✅ | Gateway token auth required on first visit; retrieve via `docker logs openclaw_sandbox` |
+| 9.3 | Harden error output: all catch blocks write full stack to session log only; user sees 1-line message + log path; remove any raw error surfacing | ✅ | Added `logError()` to logger.ts; all catch blocks use it; only first line of message shown to user |
+| 9.4 | Add settings review + change menu to outro: display a summary table of the active profile's config values; offer `p.select` "Would you like to change any settings?" → if yes, show each setting as a selectable item → allow value change → rewrite `clawdbot.json` + restart container | ✅ | `settingsReview()` function in index.ts; `generateConfig()` updated to accept override config; `stopContainer()` added to container.ts |
+| 9.5 | Rewrite outro success banner: clear success visual, ordered next-steps list based on correct access method (from 9.2), workspace path, profile summary | ✅ | Shows `http://127.0.0.1:18789/`, gateway token auth steps, workspace path, health check URL |

@@ -28,6 +28,12 @@ export function log(level: 'INFO' | 'WARN' | 'ERROR', message: string): void {
   appendFileSync(logPath, `[${time}] [${level}] ${message}\n`);
 }
 
+/** Logs the full error stack to the session log; does NOT surface details to the user. */
+export function logError(context: string, err: unknown): void {
+  const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  log('ERROR', `${context}\n${stack}`);
+}
+
 /** Returns the current log file path, or null if not initialised. */
 export function getLogPath(): string | null {
   return logPath;

@@ -3,9 +3,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SecurityProfileKey } from './types.js';
 
+const CONTAINER_NAME = 'openclaw_sandbox';
+
 const WORKSPACE_PATH = join(homedir(), 'Desktop', 'OpenClaw_Workspace');
 const IMAGE = 'ghcr.io/openclaw/openclaw:latest';
-const PORT = 3845;
+const GATEWAY_PORT = 18789; // Control UI + WebSocket gateway
+const EXPOSED_PORT = 3845;  // Image's declared EXPOSE (kept for compatibility)
 
 /** Pulls the OpenClaw container image; returns the pulled image size. */
 export async function pullContainerImage(): Promise<{ size: string }> {
@@ -48,8 +51,9 @@ export async function launchContainer(
         'run',
         '--detach',
         '--rm',
-        '--name', 'openclaw_sandbox',
-        '--publish', `${PORT}:${PORT}`,
+        '--name', CONTAINER_NAME,
+        '--publish', `${GATEWAY_PORT}:${GATEWAY_PORT}`,
+        '--publish', `${EXPOSED_PORT}:${EXPOSED_PORT}`,
         '--volume', `${WORKSPACE_PATH}:/workspace`,
         '--env', `ANTHROPIC_API_KEY=${apiKey}`,
         IMAGE,
@@ -63,5 +67,14 @@ export async function launchContainer(
     throw err;
   }
 
-  return { port: PORT };
+  return { port: GATEWAY_PORT };
+}
+
+/** Stops the running OpenClaw container; no-op if it isn't running. */
+export async function stopContainer(): Promise<void> {
+  try {
+    await execa('docker', ['stop', CONTAINER_NAME], { stdio: 'pipe', timeout: 15_000 });
+  } catch {
+    // Container not running or already stopped — ignore
+  }
 }

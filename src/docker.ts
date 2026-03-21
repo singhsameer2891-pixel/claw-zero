@@ -27,23 +27,27 @@ export async function installDocker(): Promise<void> {
   }
 }
 
-/** Open Docker.app and poll `docker info` until daemon is ready (max 60s). */
-export async function startDockerDaemon(): Promise<void> {
-  // Check if daemon is already running
+/** Returns true if the Docker daemon is currently responding. */
+export async function isDaemonRunning(): Promise<boolean> {
   try {
     await execa('docker', ['info'], { stdio: 'ignore' });
-    return; // Already running
+    return true;
   } catch {
-    // Not running — launch it
+    return false;
   }
+}
 
+/** Open Docker.app without waiting — caller is responsible for waiting via pollDaemonReady(). */
+export async function launchDockerApp(): Promise<void> {
   await execa('open', ['-a', 'Docker']);
+}
 
+/** Poll `docker info` until the daemon responds or the timeout elapses. */
+export async function pollDaemonReady(timeoutMs = 30_000): Promise<void> {
   const POLL_INTERVAL_MS = 2000;
-  const MAX_WAIT_MS = 60_000;
   const start = Date.now();
 
-  while (Date.now() - start < MAX_WAIT_MS) {
+  while (Date.now() - start < timeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     try {
       await execa('docker', ['info'], { stdio: 'ignore' });
@@ -53,5 +57,12 @@ export async function startDockerDaemon(): Promise<void> {
     }
   }
 
-  throw new Error('open -a Docker timed out after 60s — check your internet connection');
+  throw new Error('Docker daemon did not respond within 30s — try again once Docker is fully started');
+}
+
+/** @deprecated Use isDaemonRunning() + launchDockerApp() + pollDaemonReady() instead. */
+export async function startDockerDaemon(): Promise<void> {
+  if (await isDaemonRunning()) return;
+  await launchDockerApp();
+  await pollDaemonReady();
 }

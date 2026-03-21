@@ -2,15 +2,15 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { Listr } from 'listr2';
-import type { SecurityProfileKey } from './types.js';
+import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
-import { checkDocker, installDocker, startDockerDaemon } from './docker.js';
+import { checkDocker, installDocker, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
 import { createWorkspace } from './workspace.js';
-import { pullContainerImage, launchContainer } from './container.js';
+import { pullContainerImage, launchContainer, stopContainer } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
-import { initLog, log, getLogPath } from './logger.js';
+import { initLog, log, logError, getLogPath } from './logger.js';
 
 /** Formats API key for inline confirmation: first 7 + last 4 chars. */
 function maskApiKey(key: string): string {
@@ -33,6 +33,135 @@ function highlightJson(obj: object): string {
         );
     })
     .join('\n');
+}
+
+/** Formats a config value for display in the settings table. */
+function formatConfigValue(key: string, config: ClawdbotConfig): string {
+  switch (key) {
+    case 'sandbox.mode':       return config.sandbox.mode;
+    case 'workspaceAccess':    return config.workspaceAccess;
+    case 'skill_registry_trust': return config.skill_registry_trust;
+    case 'max_budget':         return config.max_budget === 0 ? 'unlimited' : String(config.max_budget);
+    case 'require_human_approval':
+      return config.require_human_approval.length === 0
+        ? '(none)'
+        : config.require_human_approval.join(', ');
+    default: return '';
+  }
+}
+
+/**
+ * Displays the active config as a summary table and optionally lets the user
+ * change individual settings. Returns the (possibly updated) config.
+ */
+async function settingsReview(
+  config: ClawdbotConfig,
+  profileLabel: string,
+  apiKey: string,
+  profileKey: SecurityProfileKey,
+  currentPort: number
+): Promise<{ config: ClawdbotConfig; port: number }> {
+  const SETTINGS = [
+    { key: 'sandbox.mode',           label: 'Sandbox mode' },
+    { key: 'workspaceAccess',        label: 'Workspace access' },
+    { key: 'skill_registry_trust',   label: 'Skill registry trust' },
+    { key: 'max_budget',             label: 'Max budget (tokens)' },
+    { key: 'require_human_approval', label: 'Require human approval' },
+  ];
+
+  const colW = 28;
+  const table = [
+    pc.dim('  Setting                     Value'),
+    pc.dim('  ' + '─'.repeat(44)),
+    ...SETTINGS.map((s) =>
+      `  ${pc.cyan(s.label.padEnd(colW))} ${pc.white(formatConfigValue(s.key, config))}`
+    ),
+  ].join('\n');
+
+  console.log(`\n${pc.dim('◇')} ${pc.bold(`Active profile: ${profileLabel}`)}\n${table}\n`);
+
+  const wantChange = await p.confirm({ message: 'Would you like to change any settings?' });
+  if (p.isCancel(wantChange) || !wantChange) return { config, port: currentPort };
+
+  let updated = { ...config, sandbox: { ...config.sandbox } };
+
+  const settingToChange = await p.select({
+    message: 'Which setting would you like to change?',
+    options: SETTINGS.map((s) => ({
+      value: s.key,
+      label: s.label,
+      hint: formatConfigValue(s.key, config),
+    })),
+  });
+  if (p.isCancel(settingToChange)) return { config, port: currentPort };
+
+  if (settingToChange === 'sandbox.mode') {
+    const val = await p.select({
+      message: 'Sandbox mode',
+      options: [
+        { value: 'all',      label: 'all',      hint: 'Full sandbox — all commands intercepted' },
+        { value: 'non-main', label: 'non-main', hint: 'Sandbox non-critical commands only' },
+        { value: 'off',      label: 'off',      hint: 'No sandboxing' },
+      ],
+      initialValue: updated.sandbox.mode,
+    });
+    if (!p.isCancel(val)) updated.sandbox.mode = val as ClawdbotConfig['sandbox']['mode'];
+
+  } else if (settingToChange === 'workspaceAccess') {
+    const val = await p.select({
+      message: 'Workspace access',
+      options: [
+        { value: 'ro',     label: 'ro',     hint: 'Read-only' },
+        { value: 'scoped', label: 'scoped', hint: 'Scoped read/write' },
+        { value: 'rw',     label: 'rw',     hint: 'Full read/write' },
+      ],
+      initialValue: updated.workspaceAccess,
+    });
+    if (!p.isCancel(val)) updated.workspaceAccess = val as ClawdbotConfig['workspaceAccess'];
+
+  } else if (settingToChange === 'skill_registry_trust') {
+    const val = await p.select({
+      message: 'Skill registry trust',
+      options: [
+        { value: 'none',          label: 'none',          hint: 'No external skills allowed' },
+        { value: 'verified_only', label: 'verified_only', hint: 'Only verified skills' },
+        { value: 'all',           label: 'all',           hint: 'All skills allowed' },
+      ],
+      initialValue: updated.skill_registry_trust,
+    });
+    if (!p.isCancel(val)) updated.skill_registry_trust = val as ClawdbotConfig['skill_registry_trust'];
+
+  } else if (settingToChange === 'max_budget') {
+    const val = await p.text({
+      message: 'Max budget (tokens). Enter 0 for unlimited.',
+      initialValue: String(updated.max_budget),
+      validate: (v) => {
+        if (!/^\d+$/.test(v)) return 'Must be a non-negative integer.';
+      },
+    });
+    if (!p.isCancel(val)) updated.max_budget = parseInt(val as string, 10);
+
+  } else if (settingToChange === 'require_human_approval') {
+    const val = await p.text({
+      message: 'Commands requiring human approval (comma-separated). Leave empty for none.',
+      initialValue: updated.require_human_approval.join(', '),
+    });
+    if (!p.isCancel(val)) {
+      updated.require_human_approval = (val as string)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  // Rewrite clawdbot.json and restart container with updated config
+  console.log(pc.dim('\n  Applying changes...'));
+  await generateConfig(profileKey, apiKey, updated);
+  await stopContainer();
+  const { port } = await launchContainer(apiKey, profileKey);
+
+  console.log(pc.green('  ✔ Settings applied and container restarted.\n'));
+  return { config: updated, port };
 }
 
 async function main() {
@@ -93,13 +222,45 @@ async function main() {
   // ── 8.5 Pre-flight gate ──────────────────────────────────────────────────────
   const dockerInstalled = await checkDocker();
 
+  // ── 9.1 Docker daemon wait with user guidance ────────────────────────────────
+  if (dockerInstalled && !(await isDaemonRunning())) {
+    await launchDockerApp();
+    p.note(
+      [
+        'Docker Desktop is launching.',
+        '',
+        '  1.  Complete sign-in or registration in the Docker window.',
+        '  2.  Accept the license agreement if prompted.',
+        '  3.  Wait for the Docker menu-bar icon to show "Engine running".',
+        '',
+        'Press Enter below once Docker is fully started.',
+      ].join('\n'),
+      'Docker setup required'
+    );
+    const ready = await p.confirm({ message: 'Is Docker running and ready?' });
+    if (p.isCancel(ready) || !ready) {
+      p.cancel('Setup cancelled — restart once Docker is running.');
+      process.exit(0);
+    }
+    try {
+      await pollDaemonReady(30_000);
+    } catch (err) {
+      logError('Docker daemon poll timed out', err);
+      const lp = getLogPath();
+      const logHint = lp ? `\n  Log: ${lp}` : '';
+      p.cancel(`Docker is not responding. Start Docker Desktop and try again.${logHint}`);
+      process.exit(1);
+    }
+  }
+
   let speedMbps = 0;
   try {
     process.stdout.write(pc.dim('  Measuring download speed...'));
     const speedResult = await checkInternetSpeed();
     speedMbps = speedResult.mbps;
     process.stdout.write(`\r${' '.repeat(40)}\r`); // clear the line
-  } catch {
+  } catch (err) {
+    logError('Internet speed check failed (non-fatal)', err);
     process.stdout.write(`\r${' '.repeat(40)}\r`);
     // Non-fatal — proceed without estimate
   }
@@ -147,7 +308,6 @@ async function main() {
             await installDocker();
             log('INFO', 'Docker installed via Homebrew');
           }
-          await startDockerDaemon();
           try {
             const { stdout } = await execa('docker', ['--version']);
             dockerVersion = stdout.trim();
@@ -205,33 +365,48 @@ async function main() {
   try {
     await tasks.run();
   } catch (err) {
-    const message = (err as Error).message;
-    log('ERROR', `Setup failed: ${message}`);
+    logError('Setup failed during install tasks', err);
+    const firstLine = (err instanceof Error ? err.message : String(err)).split('\n')[0];
     const lp = getLogPath();
     const logHint = lp ? `\n  Log: ${lp}` : '';
-    p.cancel(`Setup failed: ${message}${logHint}`);
+    p.cancel(`Setup failed: ${firstLine}${logHint}`);
     process.exit(1);
   }
 
-  // ── 3.7 Outro ───────────────────────────────────────────────────────────────
+  // ── 9.4 Settings review ──────────────────────────────────────────────────────
+  const reviewResult = await settingsReview(
+    selectedProfile.config,
+    selectedProfile.label,
+    apiKey as string,
+    profileKey as SecurityProfileKey,
+    containerPort
+  );
+  containerPort = reviewResult.port;
+
+  // ── 9.5 Outro ────────────────────────────────────────────────────────────────
   const box = [
-    `  ${pc.dim('│')}  ☕  Pouring some coffee for your new AI intern...`,
+    `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  Workspace  →  ${pc.cyan(WORKSPACE_PATH)}`,
-    `  ${pc.dim('│')}  Access     →  ${pc.cyan(`localhost:${containerPort}`)}`,
     `  ${pc.dim('│')}  Profile    →  ${pc.yellow(selectedProfile.label)}`,
+    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(`http://127.0.0.1:${containerPort}/`)}`,
     `  ${pc.dim('│')}`,
-    `  ${pc.dim('│')}  Drop files into the workspace folder to begin.`,
+    `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
+    `  ${pc.dim('│')}    1. Open ${pc.cyan(`http://127.0.0.1:${containerPort}/`)} in your browser`,
+    `  ${pc.dim('│')}    2. Paste your ${pc.yellow('gateway token')} into Settings to authenticate`,
+    `  ${pc.dim('│')}       (run ${pc.dim('docker logs openclaw_sandbox')} to find it)`,
+    `  ${pc.dim('│')}    3. Drop files into the workspace folder to share with the agent`,
+    `  ${pc.dim('│')}`,
+    `  ${pc.dim('│')}  Health check: ${pc.dim(`http://127.0.0.1:${containerPort}/readyz`)}`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
 }
 
 main().catch((err) => {
-  const message = (err as Error).message;
-  log('ERROR', `Unexpected error: ${message}`);
+  logError('Unexpected top-level error', err);
   const lp = getLogPath();
   const logHint = lp ? `\n  Log: ${lp}` : '';
-  p.cancel(`Unexpected error: ${message}${logHint}`);
+  p.cancel(`An unexpected error occurred.${logHint}`);
   process.exit(1);
 });
