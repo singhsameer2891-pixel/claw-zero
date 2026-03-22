@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { execa } from 'execa';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SecurityProfileKey } from './types.js';
@@ -63,11 +64,13 @@ export async function launchContainer(
   // Silently remove any stale container with the same name (exit code 125 conflict fix)
   await execa('docker', ['rm', '-f', CONTAINER_NAME], { stdio: 'pipe' }).catch(() => {});
 
-  // Pre-seed OpenClaw config with bind=lan + allowed origins for Docker port forwarding
+  // Generate a gateway token and pre-seed config: bind=lan + token auth + allowed origins
   await execa('mkdir', ['-p', OPENCLAW_STATE_DIR]);
+  const gatewayToken = randomBytes(24).toString('hex');
   const openclawConfig = {
     gateway: {
       bind: 'lan',
+      auth: { mode: 'token', token: gatewayToken },
       controlUi: {
         allowedOrigins: [`http://127.0.0.1:${GATEWAY_PORT}`, `http://localhost:${GATEWAY_PORT}`],
       },
@@ -101,21 +104,7 @@ export async function launchContainer(
     throw new Error(masked);
   }
 
-  // Read the auth token the gateway wrote back to the config
-  let token = '';
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    try {
-      const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
-      const cfg = JSON.parse(raw);
-      token = cfg?.gateway?.auth?.token ?? '';
-      if (token) break;
-    } catch {
-      // Config not yet written — retry
-    }
-  }
-
-  return { port: GATEWAY_PORT, token };
+  return { port: GATEWAY_PORT, token: gatewayToken };
 }
 
 /** Stops the running OpenClaw container; no-op if it isn't running. */

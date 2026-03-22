@@ -389,21 +389,19 @@ async function main() {
   gatewayToken = reviewResult.token;
 
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
-  const canvasUrl = gatewayToken
-    ? `http://127.0.0.1:${containerPort}/__openclaw__/auth?token=${gatewayToken}`
-    : `http://127.0.0.1:${containerPort}/__openclaw__/canvas/`;
+  const dashboardUrl = `http://127.0.0.1:${containerPort}/#token=${gatewayToken}`;
   const box = [
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  Workspace  →  ${pc.cyan(WORKSPACE_PATH)}`,
     `  ${pc.dim('│')}  Profile    →  ${pc.yellow(selectedProfile.label)}`,
-    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(canvasUrl)}`,
+    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(dashboardUrl)}`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
     `  ${pc.dim('│')}    1. Open the Control UI link above in your browser`,
     `  ${pc.dim('│')}    2. Drop files into the workspace folder to share with the agent`,
     `  ${pc.dim('│')}`,
-    `  ${pc.dim('│')}  Health check: ${pc.dim(canvasUrl)}`,
+    `  ${pc.dim('│')}  Health check: ${pc.dim(dashboardUrl)}`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
