@@ -73,6 +73,7 @@ export async function launchContainer(
       auth: { mode: 'token', token: gatewayToken },
       controlUi: {
         allowedOrigins: [`http://127.0.0.1:${GATEWAY_PORT}`, `http://localhost:${GATEWAY_PORT}`],
+        allowInsecureAuth: true,
       },
     },
   };
@@ -105,6 +106,47 @@ export async function launchContainer(
   }
 
   return { port: GATEWAY_PORT, token: gatewayToken };
+}
+
+/**
+ * Polls for pending device pairing requests and auto-approves them.
+ * Docker port forwarding makes the client appear non-local (192.168.65.x),
+ * which prevents the gateway's silent auto-pairing. This compensates by
+ * approving pending requests from inside the container.
+ *
+ * Polls every 2s for up to `maxWaitMs` (default 120s). Resolves `true` once
+ * a device is approved, `false` on timeout. Runs fire-and-forget from the CLI.
+ */
+export async function autoApprovePairing(
+  gatewayToken: string,
+  maxWaitMs = 120_000
+): Promise<boolean> {
+  const deadline = Date.now() + maxWaitMs;
+  const interval = 2_000;
+
+  while (Date.now() < deadline) {
+    try {
+      const { stdout } = await execa(
+        'docker',
+        [
+          'exec', CONTAINER_NAME,
+          'npx', 'openclaw', 'devices', 'approve',
+          '--latest',
+          '--token', gatewayToken,
+          '--json',
+        ],
+        { stdio: 'pipe', timeout: 10_000 }
+      );
+      // If we get here without throwing, a device was approved
+      if (stdout.includes('"ok"') || stdout.includes('"approved"') || !stdout.includes('"error"')) {
+        return true;
+      }
+    } catch {
+      // No pending requests yet — wait and retry
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  return false;
 }
 
 /** Stops the running OpenClaw container; no-op if it isn't running. */

@@ -161,3 +161,19 @@
 | 12.3 | Write `tests/e2e/dashboard.spec.ts` — test that navigates to `/__openclaw__/canvas/`, asserts page loads (title or key DOM element visible), and verifies no console errors | ✅ | 3 tests: page loads, no console errors, health check 200 |
 | 12.4 | Add `"test:e2e"` script to `package.json`: `npx playwright test` | ✅ | |
 | 12.5 | Update `docs/dev/setup.md` with Playwright setup instructions and how to run e2e tests | ✅ | Created full dev setup guide including e2e section |
+
+---
+
+## GROUP 13: Fix Dashboard Pairing & Auto-Open ✅ DONE
+**Depends on:** GROUP 12
+**Summary:** Fix the "pairing required" bug caused by Docker port forwarding making browser connections appear non-local; auto-open the dashboard URL in the user's browser and auto-approve device pairing.
+
+**RCA:** Docker port forwarding maps browser requests through the bridge network (`192.168.65.1`), making `isLocalClient=false` in the gateway's `shouldAllowSilentLocalPairing()` check. This prevents the gateway from auto-approving device pairing for localhost connections. The `allowInsecureAuth` config flag only skips device identity generation (not pairing) and doesn't help when the browser can generate device identity (which it always can on localhost via SubtleCrypto).
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 13.1 | Add `autoApprovePairing()` to `container.ts` — polls `docker exec openclaw devices approve --latest` every 2s for up to 30s | ✅ | Compensates for Docker bridge making `isLocalClient=false` |
+| 13.2 | Auto-open dashboard URL in browser via `open` command after container boot | ✅ | `execa('open', [dashboardUrl])` before auto-approve polling |
+| 13.3 | Wire auto-approve into `index.ts` — runs after browser is opened, before outro | ✅ | 30s poll window; catches the browser's pending pairing request |
+| 13.4 | Update e2e test to verify the full flow: open page → approve device → reload → connected | ✅ | Playwright test passes; also added `allowInsecureAuth: true` to gateway config |
+| 13.5 | Update outro next-steps text — no longer asks user to manually open URL | ✅ | "Control UI should already be open in your browser" |

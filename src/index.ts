@@ -8,7 +8,7 @@ import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
 import { checkDocker, installDocker, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
 import { createWorkspace } from './workspace.js';
-import { pullContainerImage, launchContainer, stopContainer } from './container.js';
+import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
 import { initLog, log, logError, getLogPath } from './logger.js';
 
@@ -390,6 +390,16 @@ async function main() {
 
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
   const dashboardUrl = `http://127.0.0.1:${containerPort}/#token=${gatewayToken}`;
+
+  // Open the dashboard in the user's default browser
+  console.log(pc.dim('\n  Opening Control UI in your browser...'));
+  await execa('open', [dashboardUrl]).catch(() => {});
+
+  // Auto-approve device pairing — Docker port forwarding makes the browser
+  // appear non-local (192.168.65.x), preventing the gateway's silent auto-pair.
+  // Poll for 30s to catch the browser's pairing request and approve it.
+  await autoApprovePairing(gatewayToken, 30_000);
+
   const box = [
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
@@ -398,10 +408,9 @@ async function main() {
     `  ${pc.dim('│')}  Control UI →  ${pc.cyan(dashboardUrl)}`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
-    `  ${pc.dim('│')}    1. Open the Control UI link above in your browser`,
-    `  ${pc.dim('│')}    2. Drop files into the workspace folder to share with the agent`,
-    `  ${pc.dim('│')}`,
-    `  ${pc.dim('│')}  Health check: ${pc.dim(dashboardUrl)}`,
+    `  ${pc.dim('│')}    1. The Control UI should already be open in your browser`,
+    `  ${pc.dim('│')}    2. If it shows "pairing required", refresh the page`,
+    `  ${pc.dim('│')}    3. Drop files into the workspace folder to share with the agent`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
