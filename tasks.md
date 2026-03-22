@@ -147,3 +147,17 @@
 |----|------|--------|-------|
 | 11.1 | In `src/container.ts`: remove `--publish 3845:3845` from the `docker run` args; update `GATEWAY_PORT` comment to clarify it also serves the canvas HTTP path | ✅ | Port 3845 unused per container logs |
 | 11.2 | In `src/index.ts`: update all references to the OpenClaw URL — replace `http://127.0.0.1:18789/` with `http://127.0.0.1:18789/__openclaw__/canvas/`; update health check URL to `http://127.0.0.1:18789/__openclaw__/canvas/` | ✅ | Affects outro box + next-steps list |
+
+---
+
+## GROUP 12: E2E Browser Testing with Playwright ✅ DONE
+**Depends on:** GROUP 11
+**Summary:** Install Playwright as a dev dependency; write an e2e test that boots the CLI, launches the container, and verifies the OpenClaw canvas dashboard loads and connects in a real browser.
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| 12.1 | Install `@playwright/test` as a dev dep; run `npx playwright install chromium` to download the browser binary (~200 MB) | ✅ | Chromium v1208 + FFmpeg + headless shell downloaded |
+| 12.2 | Create `playwright.config.ts` at project root — base URL `http://127.0.0.1:18789`, timeout 60s, single Chromium project | ✅ | |
+| 12.3 | Write `tests/e2e/dashboard.spec.ts` — test that navigates to `/__openclaw__/canvas/`, asserts page loads (title or key DOM element visible), and verifies no console errors | ✅ | 3 tests: page loads, no console errors, health check 200 |
+| 12.4 | Add `"test:e2e"` script to `package.json`: `npx playwright test` | ✅ | |
+| 12.5 | Update `docs/dev/setup.md` with Playwright setup instructions and how to run e2e tests | ✅ | Created full dev setup guide including e2e section |
