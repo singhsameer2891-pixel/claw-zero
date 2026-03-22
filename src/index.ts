@@ -401,7 +401,16 @@ async function main() {
   // Auto-approve device pairing — Docker port forwarding makes the browser
   // appear non-local (192.168.65.x), preventing the gateway's silent auto-pair.
   // Poll for 30s to catch the browser's pairing request and approve it.
-  await autoApprovePairing(gatewayToken, 30_000);
+  const approved = await autoApprovePairing(gatewayToken, 30_000);
+
+  // After approval, refresh the browser so it reconnects with the paired device.
+  // The control UI doesn't auto-reconnect after a pairing rejection.
+  if (approved) {
+    await new Promise((r) => setTimeout(r, 1_000));
+    await execa('osascript', [
+      '-e', 'tell application "System Events" to keystroke "r" using command down',
+    ]).catch(() => {});
+  }
 
   const box = [
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
@@ -412,8 +421,7 @@ async function main() {
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
     `  ${pc.dim('│')}    1. The Control UI should already be open in your browser`,
-    `  ${pc.dim('│')}    2. If it shows "pairing required", refresh the page`,
-    `  ${pc.dim('│')}    3. Drop files into the workspace folder to share with the agent`,
+    `  ${pc.dim('│')}    2. Drop files into the workspace folder to share with the agent`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
