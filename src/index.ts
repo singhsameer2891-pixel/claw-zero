@@ -8,7 +8,7 @@ import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
 import { checkDocker, installDocker, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
 import { createWorkspace } from './workspace.js';
-import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing } from './container.js';
+import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing, waitForGateway } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
 import { initLog, log, logError, getLogPath } from './logger.js';
 
@@ -390,6 +390,9 @@ async function main() {
 
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
   const dashboardUrl = `http://127.0.0.1:${containerPort}/#token=${gatewayToken}`;
+
+  // Wait for the gateway to be ready before opening the browser
+  await waitForGateway(containerPort);
 
   // Open the dashboard in the user's default browser
   console.log(pc.dim('\n  Opening Control UI in your browser...'));

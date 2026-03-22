@@ -149,6 +149,22 @@ export async function autoApprovePairing(
   return false;
 }
 
+/** Waits for the gateway HTTP server to be ready (accepting connections). */
+export async function waitForGateway(port: number, maxWaitMs = 15_000): Promise<void> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`http://127.0.0.1:${port}/`, {
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (resp.ok || resp.status === 401) return; // server is up
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 /** Stops the running OpenClaw container; no-op if it isn't running. */
 export async function stopContainer(): Promise<void> {
   try {
