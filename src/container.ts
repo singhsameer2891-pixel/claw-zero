@@ -9,17 +9,31 @@ const WORKSPACE_PATH = join(homedir(), 'Desktop', 'OpenClaw_Workspace');
 const IMAGE = 'ghcr.io/openclaw/openclaw:latest';
 const GATEWAY_PORT = 18789; // Serves the canvas UI (/__openclaw__/canvas/) + WebSocket gateway
 
-/** Pulls the OpenClaw container image; returns the pulled image size. */
-export async function pullContainerImage(): Promise<{ size: string }> {
+/** Checks if the OpenClaw image already exists locally. */
+async function imageExistsLocally(): Promise<boolean> {
   try {
-    await execa('docker', ['pull', IMAGE], { stdio: 'pipe', timeout: 600_000 });
-  } catch (err: unknown) {
-    const stderr = (err as { stderr?: string }).stderr ?? '';
-    const lastLine = stderr.trim().split('\n').pop() ?? 'docker pull failed';
-    throw new Error(lastLine);
+    await execa('docker', ['image', 'inspect', IMAGE], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Pulls the OpenClaw container image if not already present; returns the image size. */
+export async function pullContainerImage(): Promise<{ size: string }> {
+  const exists = await imageExistsLocally();
+
+  if (!exists) {
+    try {
+      await execa('docker', ['pull', IMAGE], { stdio: 'pipe', timeout: 600_000 });
+    } catch (err: unknown) {
+      const stderr = (err as { stderr?: string }).stderr ?? '';
+      const lastLine = stderr.trim().split('\n').pop() ?? 'docker pull failed';
+      throw new Error(lastLine);
+    }
   }
 
-  // Get image size after pull
+  // Get image size
   const { stdout } = await execa('docker', [
     'image',
     'inspect',
