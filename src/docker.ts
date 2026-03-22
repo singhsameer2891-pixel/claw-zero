@@ -2,18 +2,22 @@ import { execa } from 'execa';
 import { existsSync } from 'node:fs';
 
 /**
- * Returns true if Docker Desktop is installed OR the docker CLI responds.
- * Checks /Applications/Docker.app first (covers the installed-but-not-launched case)
- * before falling back to `docker --version`.
+ * Returns true if the `docker` CLI is callable.
+ * The .app bundle may exist without the CLI being on PATH (fresh Homebrew install
+ * that hasn't been launched yet), so we always verify the binary responds.
  */
 export async function checkDocker(): Promise<boolean> {
-  if (existsSync('/Applications/Docker.app')) return true;
   try {
     await execa('docker', ['--version']);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Returns true if Docker Desktop is installed (even if not yet launched). */
+export function isDockerAppInstalled(): boolean {
+  return existsSync('/Applications/Docker.app');
 }
 
 /** Install Docker Desktop via Homebrew Cask. Captures output — does not bleed into Listr spinner. */

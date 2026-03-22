@@ -6,7 +6,7 @@ import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
-import { checkDocker, installDocker, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
+import { checkDocker, installDocker, isDockerAppInstalled, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
 import { createWorkspace } from './workspace.js';
 import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing, waitForGateway } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
@@ -305,10 +305,19 @@ async function main() {
         task: async (_, task) => {
           log('INFO', 'Task 1 start: Docker check');
           if (!dockerInstalled) {
-            task.title = 'Installing Docker via Homebrew...';
-            log('INFO', 'Docker not found — starting Homebrew install');
-            await installDocker();
-            log('INFO', 'Docker installed via Homebrew');
+            if (!isDockerAppInstalled()) {
+              task.title = 'Installing Docker via Homebrew...';
+              log('INFO', 'Docker not found — starting Homebrew install');
+              await installDocker();
+              log('INFO', 'Docker installed via Homebrew');
+            }
+            // Fresh install or app exists but CLI not on PATH — launch Docker Desktop
+            // so it registers the `docker` CLI symlinks and starts the daemon.
+            task.title = 'Launching Docker Desktop...';
+            log('INFO', 'Launching Docker Desktop for first-time CLI setup');
+            await launchDockerApp();
+            await pollDaemonReady(60_000);
+            log('INFO', 'Docker daemon ready after first launch');
           }
           try {
             const { stdout } = await execa('docker', ['--version']);
