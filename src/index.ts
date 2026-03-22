@@ -389,8 +389,9 @@ async function main() {
   gatewayToken = reviewResult.token;
 
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
-  const tokenParam = gatewayToken ? `?token=${gatewayToken}` : '';
-  const canvasUrl = `http://127.0.0.1:${containerPort}/__openclaw__/canvas/${tokenParam}`;
+  const canvasUrl = gatewayToken
+    ? `http://127.0.0.1:${containerPort}/__openclaw__/auth?token=${gatewayToken}`
+    : `http://127.0.0.1:${containerPort}/__openclaw__/canvas/`;
   const box = [
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
