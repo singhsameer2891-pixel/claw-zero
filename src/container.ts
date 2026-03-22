@@ -32,7 +32,7 @@ export async function pullContainerImage(): Promise<{ size: string }> {
       await execa('docker', ['pull', IMAGE], { stdio: 'pipe', timeout: 600_000 });
     } catch (err: unknown) {
       const stderr = (err as { stderr?: string }).stderr ?? '';
-      const lastLine = stderr.trim().split('\n').pop() ?? 'docker pull failed';
+      const lastLine = stderr.trim().split('\n').pop() || `docker pull failed: ${IMAGE}`;
       throw new Error(lastLine);
     }
   }
