@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SecurityProfileKey } from './types.js';
@@ -8,6 +9,8 @@ const CONTAINER_NAME = 'openclaw_sandbox';
 const WORKSPACE_PATH = join(homedir(), 'Desktop', 'OpenClaw_Workspace');
 const IMAGE = 'ghcr.io/openclaw/openclaw:latest';
 const GATEWAY_PORT = 18789; // Serves the canvas UI (/__openclaw__/canvas/) + WebSocket gateway
+const OPENCLAW_STATE_DIR = join(WORKSPACE_PATH, '.openclaw');
+const OPENCLAW_CONFIG_PATH = join(OPENCLAW_STATE_DIR, 'openclaw.json');
 
 /** Checks if the OpenClaw image already exists locally. */
 async function imageExistsLocally(): Promise<boolean> {
@@ -50,15 +53,27 @@ export async function pullContainerImage(): Promise<{ size: string }> {
 /**
  * Runs the OpenClaw container:
  * - Mounts ONLY ~/Desktop/OpenClaw_Workspace (never the full home dir)
- * - Exposes port 3845
+ * - Exposes gateway port 18789 with --bind lan (required for Docker port forwarding)
  * - Passes the API key as ANTHROPIC_API_KEY env var
  */
 export async function launchContainer(
   apiKey: string,
   _profileKey: SecurityProfileKey
-): Promise<{ port: number }> {
+): Promise<{ port: number; token: string }> {
   // Silently remove any stale container with the same name (exit code 125 conflict fix)
   await execa('docker', ['rm', '-f', CONTAINER_NAME], { stdio: 'pipe' }).catch(() => {});
+
+  // Pre-seed OpenClaw config with bind=lan + allowed origins for Docker port forwarding
+  await execa('mkdir', ['-p', OPENCLAW_STATE_DIR]);
+  const openclawConfig = {
+    gateway: {
+      bind: 'lan',
+      controlUi: {
+        allowedOrigins: [`http://127.0.0.1:${GATEWAY_PORT}`, `http://localhost:${GATEWAY_PORT}`],
+      },
+    },
+  };
+  await writeFile(OPENCLAW_CONFIG_PATH, JSON.stringify(openclawConfig, null, 2));
 
   try {
     await execa(
@@ -70,6 +85,7 @@ export async function launchContainer(
         '--name', CONTAINER_NAME,
         '--publish', `${GATEWAY_PORT}:${GATEWAY_PORT}`,
         '--volume', `${WORKSPACE_PATH}:/workspace`,
+        '--volume', `${OPENCLAW_STATE_DIR}:/home/node/.openclaw`,
         '--env', `ANTHROPIC_API_KEY=${apiKey}`,
         IMAGE,
       ],
@@ -85,7 +101,21 @@ export async function launchContainer(
     throw new Error(masked);
   }
 
-  return { port: GATEWAY_PORT };
+  // Read the auth token the gateway wrote back to the config
+  let token = '';
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const raw = await readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
+      const cfg = JSON.parse(raw);
+      token = cfg?.gateway?.auth?.token ?? '';
+      if (token) break;
+    } catch {
+      // Config not yet written — retry
+    }
+  }
+
+  return { port: GATEWAY_PORT, token };
 }
 
 /** Stops the running OpenClaw container; no-op if it isn't running. */

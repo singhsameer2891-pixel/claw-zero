@@ -59,8 +59,9 @@ async function settingsReview(
   profileLabel: string,
   apiKey: string,
   profileKey: SecurityProfileKey,
-  currentPort: number
-): Promise<{ config: ClawdbotConfig; port: number }> {
+  currentPort: number,
+  currentToken: string
+): Promise<{ config: ClawdbotConfig; port: number; token: string }> {
   const SETTINGS = [
     { key: 'sandbox.mode',           label: 'Sandbox mode' },
     { key: 'workspaceAccess',        label: 'Workspace access' },
@@ -81,7 +82,7 @@ async function settingsReview(
   console.log(`\n${pc.dim('◇')} ${pc.bold(`Active profile: ${profileLabel}`)}\n${table}\n`);
 
   const wantChange = await p.confirm({ message: 'Would you like to change any settings?' });
-  if (p.isCancel(wantChange) || !wantChange) return { config, port: currentPort };
+  if (p.isCancel(wantChange) || !wantChange) return { config, port: currentPort, token: currentToken };
 
   let updated = { ...config, sandbox: { ...config.sandbox } };
 
@@ -93,7 +94,7 @@ async function settingsReview(
       hint: formatConfigValue(s.key, config),
     })),
   });
-  if (p.isCancel(settingToChange)) return { config, port: currentPort };
+  if (p.isCancel(settingToChange)) return { config, port: currentPort, token: currentToken };
 
   if (settingToChange === 'sandbox.mode') {
     const val = await p.select({
@@ -158,10 +159,10 @@ async function settingsReview(
   console.log(pc.dim('\n  Applying changes...'));
   await generateConfig(profileKey, apiKey, updated);
   await stopContainer();
-  const { port } = await launchContainer(apiKey, profileKey);
+  const { port, token } = await launchContainer(apiKey, profileKey);
 
   console.log(pc.green('  ✔ Settings applied and container restarted.\n'));
-  return { config: updated, port };
+  return { config: updated, port, token };
 }
 
 async function main() {
@@ -295,6 +296,7 @@ async function main() {
   let dockerVersion = 'Docker';
   let imageSize = '1.2 GB';
   let containerPort = 18789;
+  let gatewayToken = '';
 
   const tasks = new Listr(
     [
@@ -352,6 +354,7 @@ async function main() {
           log('INFO', 'Task 5 start: docker run');
           const result = await launchContainer(apiKey as string, profileKey as SecurityProfileKey);
           containerPort = result.port;
+          gatewayToken = result.token;
           log('INFO', `Task 5 done: container live on port ${containerPort}`);
           task.title = pc.dim(`✔ Container live on port ${containerPort}`);
         },
@@ -379,25 +382,27 @@ async function main() {
     selectedProfile.label,
     apiKey as string,
     profileKey as SecurityProfileKey,
-    containerPort
+    containerPort,
+    gatewayToken
   );
   containerPort = reviewResult.port;
+  gatewayToken = reviewResult.token;
 
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
+  const tokenParam = gatewayToken ? `?token=${gatewayToken}` : '';
+  const canvasUrl = `http://127.0.0.1:${containerPort}/__openclaw__/canvas/${tokenParam}`;
   const box = [
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  Workspace  →  ${pc.cyan(WORKSPACE_PATH)}`,
     `  ${pc.dim('│')}  Profile    →  ${pc.yellow(selectedProfile.label)}`,
-    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)}`,
+    `  ${pc.dim('│')}  Control UI →  ${pc.cyan(canvasUrl)}`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  ${pc.bold('Next steps')}`,
-    `  ${pc.dim('│')}    1. Open ${pc.cyan(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)} in your browser`,
-    `  ${pc.dim('│')}    2. Paste your ${pc.yellow('gateway token')} into Settings to authenticate`,
-    `  ${pc.dim('│')}       (run ${pc.dim('docker logs openclaw_sandbox')} to find it)`,
-    `  ${pc.dim('│')}    3. Drop files into the workspace folder to share with the agent`,
+    `  ${pc.dim('│')}    1. Open the Control UI link above in your browser`,
+    `  ${pc.dim('│')}    2. Drop files into the workspace folder to share with the agent`,
     `  ${pc.dim('│')}`,
-    `  ${pc.dim('│')}  Health check: ${pc.dim(`http://127.0.0.1:${containerPort}/__openclaw__/canvas/`)}`,
+    `  ${pc.dim('│')}  Health check: ${pc.dim(canvasUrl)}`,
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
