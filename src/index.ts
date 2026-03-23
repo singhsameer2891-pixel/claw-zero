@@ -173,13 +173,28 @@ const { version: PKG_VERSION } = JSON.parse(
 async function main() {
   // ── 3.2 Welcome intro ───────────────────────────────────────────────────────
   console.clear();
-  const W = 52;
-  const bar = pc.cyan('━'.repeat(W));
-  console.log(`  ${bar}`);
-  console.log(`  ${pc.bold(pc.cyan('  ╱╱  CLAW ZERO'))}`);
-  console.log(`  ${pc.dim('  Secure AI Sandbox  ·  One Command  ·  Zero Config')}`);
-  console.log(`  ${pc.dim(`  v${PKG_VERSION}  ·  by`)} ${pc.cyan('Sameer Singh')} ${pc.dim('·')} ${pc.dim('github.com/singhsameer2891-pixel')}`);
-  console.log(`  ${bar}\n`);
+  const logo = [
+    '',
+    `                    ${pc.red('  ██  ') + pc.dim('·') + pc.red('  ██')}`,
+    `                    ${pc.red(' ██▓█   ██▓█')}`,
+    `                    ${pc.red('  ▓██▓▓▓██▓')}`,
+    `                    ${pc.red('   ▓█████▓')}`,
+    `                    ${pc.red('    ▓███▓')}`,
+    '',
+    `    ${pc.cyan('██████╗')} ${pc.cyan('██╗')}      ${pc.cyan('█████╗')}  ${pc.cyan('██╗')}    ${pc.cyan('██╗')}    ${pc.bold(pc.white('╺━━━━━━━━━╸'))}`,
+    `    ${pc.cyan('██╔═══╝')} ${pc.cyan('██║')}     ${pc.cyan('██╔══██╗')} ${pc.cyan('██║')}    ${pc.cyan('██║')}    ${pc.bold(pc.white('Z  E  R  O'))}`,
+    `    ${pc.cyan('██║')}     ${pc.cyan('██║')}     ${pc.cyan('███████║')} ${pc.cyan('██║ █╗ ██║')}    ${pc.bold(pc.white('╺━━━━━━━━━╸'))}`,
+    `    ${pc.cyan('██║')}     ${pc.cyan('██║')}     ${pc.cyan('██╔══██║')} ${pc.cyan('██║███╗██║')}`,
+    `    ${pc.cyan('██████╗')} ${pc.cyan('██████╗')} ${pc.cyan('██║  ██║')} ${pc.cyan('╚███╔███╔╝')}`,
+    `    ${pc.cyan('╚═════╝')} ${pc.cyan('╚═════╝')} ${pc.cyan('╚═╝  ╚═╝')}  ${pc.cyan('╚══╝╚══╝')}`,
+    '',
+    `    ${pc.dim('─────────────────────────────────────────────────────')}`,
+    `    ${pc.dim('Secure AI Sandbox  ·  One Command  ·  Zero Config')}`,
+    `    ${pc.dim(`v${PKG_VERSION}`)}  ${pc.dim('·')}  ${pc.cyan('Sameer Singh')}  ${pc.dim('· github.com/singhsameer2891-pixel')}`,
+    `    ${pc.dim('─────────────────────────────────────────────────────')}`,
+    '',
+  ];
+  console.log(logo.join('\n'));
 
   // ── 3.3 API key masked input ────────────────────────────────────────────────
   const apiKey = await p.password({
