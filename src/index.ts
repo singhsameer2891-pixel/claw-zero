@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { Listr } from 'listr2';
+// listr2 removed — using @clack/prompts spinner for consistent UI
 import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
@@ -309,84 +309,64 @@ async function main() {
   const logFilePath = initLog();
   log('INFO', `Profile selected: ${profileKey as string}`);
 
-  // ── 3.6 Sequential install checklist (listr2) ───────────────────────────────
+  // ── 3.6 Sequential setup tasks ──────────────────────────────────────────────
   let dockerVersion = 'Docker';
   let imageSize = '1.2 GB';
   let containerPort = 18789;
   let gatewayToken = '';
 
-  const tasks = new Listr(
-    [
-      {
-        title: 'Checking Docker daemon...',
-        task: async (_, task) => {
-          log('INFO', 'Task 1 start: Docker check');
-          if (!(await isDaemonRunning())) {
-            // Docker was installed in pre-flight but daemon isn't up yet
-            task.title = 'Launching Docker Desktop...';
-            log('INFO', 'Launching Docker Desktop');
-            await launchDockerApp();
-            await pollDaemonReady(60_000);
-            log('INFO', 'Docker daemon ready');
-          }
-          try {
-            const { stdout } = await execa('docker', ['--version']);
-            dockerVersion = stdout.trim();
-          } catch {
-            // version string is cosmetic — don't block
-          }
-          log('INFO', `Task 1 done: ${dockerVersion} running`);
-          task.title = pc.dim(`✔ ${dockerVersion} is running`);
-        },
-      },
-      {
-        title: 'Creating workspace directory...',
-        task: async (_, task) => {
-          log('INFO', 'Task 2 start: create workspace');
-          await createWorkspace();
-          log('INFO', `Task 2 done: workspace at ${WORKSPACE_PATH}`);
-          task.title = pc.dim(`✔ Workspace ready at ${WORKSPACE_PATH}`);
-        },
-      },
-      {
-        title: 'Writing clawdbot.json...',
-        task: async (_, task) => {
-          log('INFO', 'Task 3 start: write clawdbot.json');
-          await generateConfig(profileKey as SecurityProfileKey, apiKey as string);
-          log('INFO', 'Task 3 done: clawdbot.json written');
-          task.title = pc.dim('✔ clawdbot.json written');
-        },
-      },
-      {
-        title: 'Pulling OpenClaw container image...',
-        task: async (_, task) => {
-          log('INFO', 'Task 4 start: docker pull');
-          const result = await pullContainerImage();
-          imageSize = result.size;
-          log('INFO', `Task 4 done: image pulled (${imageSize})`);
-          task.title = pc.dim(`✔ Image pulled (${imageSize})`);
-        },
-      },
-      {
-        title: 'Booting container...',
-        task: async (_, task) => {
-          log('INFO', 'Task 5 start: docker run');
-          const result = await launchContainer(apiKey as string, profileKey as SecurityProfileKey);
-          containerPort = result.port;
-          gatewayToken = result.token;
-          log('INFO', `Task 5 done: container live on port ${containerPort}`);
-          task.title = pc.dim(`✔ Container live on port ${containerPort}`);
-        },
-      },
-    ],
-    {
-      rendererOptions: { collapseErrors: false },
-    }
-  );
+  const s = p.spinner();
 
   try {
-    await tasks.run();
+    // Task 1: Docker daemon
+    s.start('Starting Docker daemon...');
+    log('INFO', 'Task 1 start: Docker check');
+    if (!(await isDaemonRunning())) {
+      s.message('Launching Docker Desktop...');
+      log('INFO', 'Launching Docker Desktop');
+      await launchDockerApp();
+      await pollDaemonReady(60_000);
+      log('INFO', 'Docker daemon ready');
+    }
+    try {
+      const { stdout } = await execa('docker', ['--version']);
+      dockerVersion = stdout.trim();
+    } catch { /* cosmetic */ }
+    log('INFO', `Task 1 done: ${dockerVersion} running`);
+    s.stop(`${dockerVersion} is running`);
+
+    // Task 2: Workspace
+    s.start('Creating workspace directory...');
+    log('INFO', 'Task 2 start: create workspace');
+    await createWorkspace();
+    log('INFO', `Task 2 done: workspace at ${WORKSPACE_PATH}`);
+    s.stop(`Workspace ready at ${WORKSPACE_PATH}`);
+
+    // Task 3: Config
+    s.start('Writing clawdbot.json...');
+    log('INFO', 'Task 3 start: write clawdbot.json');
+    await generateConfig(profileKey as SecurityProfileKey, apiKey as string);
+    log('INFO', 'Task 3 done: clawdbot.json written');
+    s.stop('clawdbot.json written');
+
+    // Task 4: Image pull
+    s.start('Pulling OpenClaw container image...');
+    log('INFO', 'Task 4 start: docker pull');
+    const pullResult = await pullContainerImage();
+    imageSize = pullResult.size;
+    log('INFO', `Task 4 done: image pulled (${imageSize})`);
+    s.stop(`Image pulled (${imageSize})`);
+
+    // Task 5: Boot container
+    s.start('Booting container...');
+    log('INFO', 'Task 5 start: docker run');
+    const runResult = await launchContainer(apiKey as string, profileKey as SecurityProfileKey);
+    containerPort = runResult.port;
+    gatewayToken = runResult.token;
+    log('INFO', `Task 5 done: container live on port ${containerPort}`);
+    s.stop(`Container live on port ${containerPort}`);
   } catch (err) {
+    s.stop('Failed', 1);
     logError('Setup failed during install tasks', err);
     const firstLine = (err instanceof Error ? err.message : String(err)).split('\n')[0];
     const lp = getLogPath();
@@ -444,6 +424,7 @@ async function main() {
   ].join('\n');
 
   p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
+  process.exit(0);
 }
 
 main().catch((err) => {
