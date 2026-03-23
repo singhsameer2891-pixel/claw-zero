@@ -1,6 +1,6 @@
 {
   "name": "claw-zero",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "One-Click CLI to securely install and sandbox the OpenClaw AI agent",
   "type": "module",
   "main": "./dist/index.js",
