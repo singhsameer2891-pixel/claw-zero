@@ -1,4 +1,6 @@
 import https from 'node:https';
+import { existsSync } from 'node:fs';
+import { execaSync } from 'execa';
 
 const SPEED_TEST_URL = 'https://speed.cloudflare.com/__down?bytes=10000000';
 const SPEED_TEST_SIZE_MB = 10;
@@ -57,15 +59,26 @@ export interface DownloadItem {
   sizeMB: number;
 }
 
+/** Checks if Homebrew already has the Docker cask DMG cached locally. */
+function isDockerCaskCached(): boolean {
+  try {
+    const { stdout } = execaSync('brew', ['--cache', '--cask', 'docker']);
+    return existsSync(stdout.trim());
+  } catch {
+    return false;
+  }
+}
+
 /** Returns the list of things that need to be downloaded. */
 export function buildDownloadManifest(dockerInstalled: boolean): DownloadItem[] {
   const items: DownloadItem[] = [];
 
   if (!dockerInstalled) {
+    const cached = isDockerCaskCached();
     items.push({
       name: 'Docker Desktop',
-      source: 'brew --cask',
-      sizeMB: 1200,
+      source: cached ? 'brew --cask (cached)' : 'brew --cask',
+      sizeMB: cached ? 0 : 1200,
     });
   }
 

@@ -6,7 +6,7 @@ import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
-import { checkDocker, installDocker, isDockerAppInstalled, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
+import { checkDocker, installDocker, getDockerAppState, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
 import { createWorkspace } from './workspace.js';
 import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing, waitForGateway } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
@@ -305,11 +305,17 @@ async function main() {
         task: async (_, task) => {
           log('INFO', 'Task 1 start: Docker check');
           if (!dockerInstalled) {
-            if (!isDockerAppInstalled()) {
+            const appState = getDockerAppState();
+            if (appState === 'missing') {
               task.title = 'Installing Docker via Homebrew...';
               log('INFO', 'Docker not found — starting Homebrew install');
               await installDocker();
               log('INFO', 'Docker installed via Homebrew');
+            } else if (appState === 'zombie') {
+              task.title = 'Repairing Docker install (partial uninstall detected)...';
+              log('INFO', 'Zombie Docker.app detected — running brew reinstall');
+              await installDocker({ reinstall: true });
+              log('INFO', 'Docker reinstalled via Homebrew');
             }
             // Fresh install or app exists but CLI not on PATH — launch Docker Desktop
             // so it registers the `docker` CLI symlinks and starts the daemon.

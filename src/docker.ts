@@ -15,18 +15,38 @@ export async function checkDocker(): Promise<boolean> {
   }
 }
 
-/** Returns true if Docker Desktop is installed (even if not yet launched). */
-export function isDockerAppInstalled(): boolean {
-  return existsSync('/Applications/Docker.app');
+/**
+ * Docker Desktop install states:
+ *   'ready'   — .app bundle exists with a valid executable inside
+ *   'zombie'  — .app directory exists but the executable is missing (partial uninstall)
+ *   'missing' — no .app directory at all
+ */
+export type DockerAppState = 'ready' | 'zombie' | 'missing';
+
+export function getDockerAppState(): DockerAppState {
+  if (!existsSync('/Applications/Docker.app')) return 'missing';
+  // The real executable — if this is gone the bundle is broken
+  if (!existsSync('/Applications/Docker.app/Contents/MacOS/Docker')) return 'zombie';
+  return 'ready';
 }
 
-/** Install Docker Desktop via Homebrew Cask. Captures output — does not bleed into Listr spinner. */
-export async function installDocker(): Promise<void> {
+/** @deprecated Use getDockerAppState() instead. */
+export function isDockerAppInstalled(): boolean {
+  return getDockerAppState() === 'ready';
+}
+
+/**
+ * Install (or reinstall) Docker Desktop via Homebrew Cask.
+ * Pass `reinstall: true` for zombie .app bundles left behind by a partial uninstall.
+ * Captures output — does not bleed into Listr spinner.
+ */
+export async function installDocker(opts: { reinstall?: boolean } = {}): Promise<void> {
+  const cmd = opts.reinstall ? 'reinstall' : 'install';
   try {
-    await execa('brew', ['install', '--cask', 'docker'], { stdio: 'pipe', timeout: 600_000 });
+    await execa('brew', [cmd, '--cask', 'docker'], { stdio: 'pipe', timeout: 600_000 });
   } catch (err: unknown) {
     const stderr = (err as { stderr?: string }).stderr ?? '';
-    const lastLine = stderr.trim().split('\n').pop() ?? 'brew install failed';
+    const lastLine = stderr.trim().split('\n').pop() ?? `brew ${cmd} failed`;
     throw new Error(lastLine);
   }
 }
@@ -43,7 +63,9 @@ export async function isDaemonRunning(): Promise<boolean> {
 
 /** Open Docker.app without waiting — caller is responsible for waiting via pollDaemonReady(). */
 export async function launchDockerApp(): Promise<void> {
-  await execa('open', ['-a', 'Docker']);
+  // Use the full path instead of `-a Docker` so macOS LaunchServices
+  // doesn't need to have indexed the app yet (matters on fresh installs).
+  await execa('open', ['/Applications/Docker.app']);
 }
 
 /** Poll `docker info` until the daemon responds or the timeout elapses. */
