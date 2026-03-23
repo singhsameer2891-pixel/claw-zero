@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-// listr2 removed — using @clack/prompts spinner for consistent UI
 import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
@@ -166,12 +165,21 @@ async function settingsReview(
   return { config: updated, port, token };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version: PKG_VERSION } = JSON.parse(
+  (await import('node:fs')).readFileSync(new URL('../package.json', import.meta.url), 'utf-8')
+);
+
 async function main() {
   // ── 3.2 Welcome intro ───────────────────────────────────────────────────────
   console.clear();
-  console.log(pc.dim('──────────────────────────────────────────────'));
-  p.intro(`${pc.bgCyan(pc.black(' 🦞 ONE-CLICK CLAW '))}  ${pc.dim('Secure Local Sandbox')}`);
-  console.log(pc.dim('──────────────────────────────────────────────'));
+  const W = 52;
+  const bar = pc.cyan('━'.repeat(W));
+  console.log(`  ${bar}`);
+  console.log(`  ${pc.bold(pc.cyan('  ╱╱  CLAW ZERO'))}`);
+  console.log(`  ${pc.dim('  Secure AI Sandbox  ·  One Command  ·  Zero Config')}`);
+  console.log(`  ${pc.dim(`  v${PKG_VERSION}  ·  by`)} ${pc.cyan('Sameer Singh')} ${pc.dim('·')} ${pc.dim('github.com/singhsameer2891-pixel')}`);
+  console.log(`  ${bar}\n`);
 
   // ── 3.3 API key masked input ────────────────────────────────────────────────
   const apiKey = await p.password({

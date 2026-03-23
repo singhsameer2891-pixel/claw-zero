@@ -1,42 +1,32 @@
-# One-Click Claw
+# Claw Zero
 
-A Node.js CLI that installs and sandboxes the [OpenClaw](https://github.com/openclaw/openclaw) AI agent on your local Mac with zero manual configuration.
-
-**What it does in one command:**
-- Checks for Docker (installs via Homebrew if missing)
-- Creates `~/Desktop/OpenClaw_Workspace`
-- Generates a `clawdbot.json` security config based on your chosen profile
-- Pulls `ghcr.io/openclaw/openclaw:latest` and boots it on `localhost:3845`
-
----
-
-## Prerequisites
-
-| Requirement | Notes |
-|---|---|
-| macOS | Homebrew auto-install is Mac-only for MVP |
-| Node.js ≥ 18 | ESModules + native `fetch` |
-| Docker Desktop | Auto-installed via Homebrew if absent |
-| Anthropic or OpenAI API key | Entered during setup; never stored in plaintext |
-
----
-
-## Quickstart
+**Secure AI sandbox in one command.** Docker-isolated [OpenClaw](https://github.com/openclaw/openclaw) agent with zero manual configuration.
 
 ```bash
-git clone <repo-url> claw_zero
-cd claw_zero
-npm install
-npm start
+npx claw-zero
 ```
 
-Follow the interactive prompts — the entire setup takes under 2 minutes.
+That's it. Claw Zero handles Docker installation, container setup, security config, and browser launch — all in a single interactive CLI session.
 
 ---
+
+## What It Does
+
+```
+npx claw-zero
+  │
+  ├─ Detects Docker state (installed / missing / broken)
+  ├─ Installs or repairs Docker Desktop via Homebrew if needed
+  ├─ Creates ~/Desktop/OpenClaw_Workspace
+  ├─ Generates clawdbot.json (security config based on chosen profile)
+  ├─ Pulls ghcr.io/openclaw/openclaw:latest
+  ├─ Boots container on localhost
+  └─ Opens the Control UI in your browser
+```
 
 ## Security Profiles
 
-Choose a profile during setup. The selection writes a `clawdbot.json` to your workspace.
+Choose a profile during setup. Each profile writes a `clawdbot.json` that controls what the AI agent can do inside the sandbox.
 
 | Profile | Sandbox | Workspace | Human Approval Required | Skill Trust | Budget |
 |---|---|---|---|---|---|
@@ -47,50 +37,110 @@ Choose a profile during setup. The selection writes a `clawdbot.json` to your wo
 
 ---
 
+## Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| **macOS** | Homebrew auto-install is Mac-only |
+| **Node.js >= 18** | ESModules + native `fetch` |
+| **Docker Desktop** | Auto-installed if absent |
+| **API key** | Anthropic or OpenAI — entered during setup, never stored in plaintext |
+
+---
+
+## Install & Run
+
+### Option 1: npx (no install)
+
+```bash
+npx claw-zero
+```
+
+### Option 2: Global install
+
+```bash
+npm install -g claw-zero
+claw-zero
+```
+
+### Option 3: From source
+
+```bash
+git clone https://github.com/singhsameer2891-pixel/claw-zero.git
+cd claw-zero
+npm install
+npm start
+```
+
+---
+
+## How It Handles Docker
+
+Claw Zero detects four possible Docker states and handles each automatically:
+
+| State | What Claw Zero Sees | Action |
+|---|---|---|
+| **Installed & running** | `docker info` responds | Proceed directly |
+| **Installed, not running** | `.app` exists, daemon offline | Launch Docker Desktop, wait for daemon |
+| **Partially uninstalled** | Leftover symlinks/metadata, broken `.app` | Clean artifacts, reinstall via Homebrew |
+| **Not installed** | Nothing found | Fresh `brew install --cask docker` |
+
+The CLI runs interactively so you can provide your password if Homebrew needs `sudo` for privileged helpers.
+
+---
+
 ## Container Details
 
 | Parameter | Value |
 |---|---|
 | Image | `ghcr.io/openclaw/openclaw:latest` |
 | Container name | `openclaw_sandbox` |
-| Port | `3845` → `localhost:3845` |
+| Port | Auto-assigned → `localhost:<port>` |
 | Volume mount | `~/Desktop/OpenClaw_Workspace:/workspace` |
-| API key env var | `ANTHROPIC_API_KEY` |
+| API key | Passed via `--env`, never written to disk |
 
 The container runs with `--detach --rm` — it stops automatically when Docker restarts.
-
----
-
-## Key Environment Variables
-
-None required at the host level. The API key is collected interactively and passed directly to the container via `--env`.
 
 ---
 
 ## Project Structure
 
 ```
-claw_zero/
+claw-zero/
 ├── src/
-│   ├── index.ts        # Entry point — UI flow
-│   ├── types.ts        # TypeScript types
-│   ├── profiles.ts     # Security profile config map
+│   ├── index.ts        # Entry point — interactive UI flow
+│   ├── docker.ts       # Docker detection, install, repair, daemon management
+│   ├── container.ts    # Image pull, container launch, pairing
+│   ├── network.ts      # Speed test, download manifest
 │   ├── config.ts       # clawdbot.json generation
-│   ├── docker.ts       # Docker detection, install, daemon start
 │   ├── workspace.ts    # Workspace directory creation
-│   └── container.ts    # Image pull + container launch
-├── PRD.md
-├── tasks.md
-└── architecture.md
+│   ├── profiles.ts     # Security profile definitions
+│   ├── logger.ts       # Session logging
+│   └── types.ts        # TypeScript types
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
 
 ---
 
-## Scripts
+## Tech Stack
 
-| Command | Action |
+| Layer | Choice |
 |---|---|
-| `npm start` | Run the CLI via `tsx` |
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run dev` | Same as `start` (alias) |
-| `npx tsc --noEmit` | Type-check without emitting |
+| Runtime | Node.js + TypeScript (ESModules) |
+| CLI UI | [@clack/prompts](https://github.com/natemoo-re/clack) + [picocolors](https://github.com/alexeyraspopov/picocolors) |
+| Process exec | [execa](https://github.com/sindresorhus/execa) |
+| Containerisation | Docker Desktop via Homebrew |
+
+---
+
+## Author
+
+**Sameer Singh** — [github.com/singhsameer2891-pixel](https://github.com/singhsameer2891-pixel)
+
+---
+
+## License
+
+MIT
