@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+import { execa, execaSync } from 'execa';
 import { existsSync } from 'node:fs';
 
 /**
@@ -17,17 +17,25 @@ export async function checkDocker(): Promise<boolean> {
 
 /**
  * Docker Desktop install states:
- *   'ready'   — .app bundle exists with a valid executable inside
- *   'zombie'  — .app directory exists but the executable is missing (partial uninstall)
- *   'missing' — no .app directory at all
+ *   'ready'    — .app bundle exists with a valid executable inside
+ *   'zombie'   — .app directory exists but the executable is missing (partial uninstall)
+ *   'orphaned' — .app is gone but brew still thinks the cask is installed (brew install no-ops)
+ *   'missing'  — no .app directory and brew has no record of the cask
  */
-export type DockerAppState = 'ready' | 'zombie' | 'missing';
+export type DockerAppState = 'ready' | 'zombie' | 'orphaned' | 'missing';
 
 export function getDockerAppState(): DockerAppState {
-  if (!existsSync('/Applications/Docker.app')) return 'missing';
-  // The real executable — if this is gone the bundle is broken
-  if (!existsSync('/Applications/Docker.app/Contents/MacOS/Docker')) return 'zombie';
-  return 'ready';
+  if (existsSync('/Applications/Docker.app')) {
+    // The real executable — if this is gone the bundle is broken
+    return existsSync('/Applications/Docker.app/Contents/MacOS/Docker') ? 'ready' : 'zombie';
+  }
+  // .app is gone — check if brew still has the cask registered (stale metadata)
+  try {
+    const result = execaSync('brew', ['list', '--cask', 'docker'], { stdio: 'ignore', reject: false });
+    return result.exitCode === 0 ? 'orphaned' : 'missing';
+  } catch {
+    return 'missing';
+  }
 }
 
 /** @deprecated Use getDockerAppState() instead. */

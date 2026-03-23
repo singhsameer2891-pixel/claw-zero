@@ -311,9 +311,9 @@ async function main() {
               log('INFO', 'Docker not found — starting Homebrew install');
               await installDocker();
               log('INFO', 'Docker installed via Homebrew');
-            } else if (appState === 'zombie') {
+            } else if (appState === 'zombie' || appState === 'orphaned') {
               task.title = 'Repairing Docker install (partial uninstall detected)...';
-              log('INFO', 'Zombie Docker.app detected — running brew reinstall');
+              log('INFO', `${appState} Docker state detected — running brew reinstall`);
               await installDocker({ reinstall: true });
               log('INFO', 'Docker reinstalled via Homebrew');
             }
