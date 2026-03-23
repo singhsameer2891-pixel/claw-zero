@@ -1,5 +1,5 @@
 import { execa, execaSync } from 'execa';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 
 /**
  * Returns true if the `docker` CLI is callable.
@@ -93,8 +93,11 @@ export async function cleanOrphanedDockerFiles(): Promise<void> {
     '/usr/local/bin/docker-credential-osxkeychain',
     '/usr/local/cli-plugins/docker-compose',
   ];
-  // Filter to only paths that actually exist to avoid unnecessary sudo prompt
-  const existing = sudoPaths.filter((fp) => existsSync(fp));
+  // Filter to paths that exist — use lstatSync (not existsSync) because these
+  // are typically dangling symlinks whose targets have been deleted.
+  const existing = sudoPaths.filter((fp) => {
+    try { lstatSync(fp); return true; } catch { return false; }
+  });
   if (existing.length > 0) {
     try {
       await execa('sudo', ['rm', '-f', ...existing], { stdio: 'inherit' });
