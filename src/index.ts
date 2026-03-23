@@ -390,28 +390,26 @@ async function main() {
   // ── 9.5 Outro ────────────────────────────────────────────────────────────────
   const dashboardUrl = `http://127.0.0.1:${containerPort}/#token=${gatewayToken}`;
 
-  // Wait for the gateway to be ready before opening the browser
+  // Wait for gateway + open browser + auto-pair — all under one spinner
+  s.start('Opening Control UI in your browser...');
   await waitForGateway(containerPort);
-
-  // Open the dashboard in the user's default browser
-  console.log(pc.dim('\n  Opening Control UI in your browser...'));
   await execa('open', [dashboardUrl]).catch(() => {});
 
   // Auto-approve device pairing — Docker port forwarding makes the browser
   // appear non-local (192.168.65.x), preventing the gateway's silent auto-pair.
-  // Poll for 30s to catch the browser's pairing request and approve it.
   const approved = await autoApprovePairing(gatewayToken, 30_000);
 
   // After approval, refresh the browser so it reconnects with the paired device.
-  // The control UI doesn't auto-reconnect after a pairing rejection.
   if (approved) {
     await new Promise((r) => setTimeout(r, 1_000));
     await execa('osascript', [
       '-e', 'tell application "System Events" to keystroke "r" using command down',
     ]).catch(() => {});
   }
+  s.stop('Control UI opened');
 
   const box = [
+    '',
     `  ${pc.dim('│')}  ☕  Your AI sandbox is ready.`,
     `  ${pc.dim('│')}`,
     `  ${pc.dim('│')}  Workspace  →  ${pc.cyan(WORKSPACE_PATH)}`,
@@ -423,7 +421,7 @@ async function main() {
     `  ${pc.dim('│')}    2. Drop files into the workspace folder to share with the agent`,
   ].join('\n');
 
-  p.outro(`${pc.green('✔')} Sandbox successfully booted!\n\n${box}`);
+  p.outro(`${pc.green('✔')} Sandbox successfully booted!${box}`);
   process.exit(0);
 }
 
