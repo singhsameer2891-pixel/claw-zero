@@ -6,7 +6,8 @@ import type { SecurityProfileKey, ClawdbotConfig } from './types.js';
 import { PROFILES } from './profiles.js';
 import { generateConfig, WORKSPACE_PATH } from './config.js';
 import { execa } from 'execa';
-import { checkDocker, installDocker, getDockerAppState, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
+import { checkDocker, installDocker, getDockerAppState, cleanOrphanedDockerFiles, isDaemonRunning, launchDockerApp, pollDaemonReady } from './docker.js';
+import type { DockerAppState } from './docker.js';
 import { createWorkspace } from './workspace.js';
 import { pullContainerImage, launchContainer, stopContainer, autoApprovePairing, waitForGateway } from './container.js';
 import { checkInternetSpeed, buildDownloadManifest, formatManifestTable } from './network.js';
@@ -221,39 +222,11 @@ async function main() {
   console.log();
 
   // ── 8.5 Pre-flight gate ──────────────────────────────────────────────────────
-  const dockerInstalled = await checkDocker();
+  let dockerInstalled = await checkDocker();
+  let appState: DockerAppState = getDockerAppState();
+  const needsDockerInstall = !dockerInstalled && appState !== 'ready';
 
-  // ── 9.1 Docker daemon wait with user guidance ────────────────────────────────
-  if (dockerInstalled && !(await isDaemonRunning())) {
-    await launchDockerApp();
-    p.note(
-      [
-        'Docker Desktop is launching.',
-        '',
-        '  1.  Complete sign-in or registration in the Docker window.',
-        '  2.  Accept the license agreement if prompted.',
-        '  3.  Wait for the Docker menu-bar icon to show "Engine running".',
-        '',
-        'Press Enter below once Docker is fully started.',
-      ].join('\n'),
-      'Docker setup required'
-    );
-    const ready = await p.confirm({ message: 'Is Docker running and ready?' });
-    if (p.isCancel(ready) || !ready) {
-      p.cancel('Setup cancelled — restart once Docker is running.');
-      process.exit(0);
-    }
-    try {
-      await pollDaemonReady(30_000);
-    } catch (err) {
-      logError('Docker daemon poll timed out', err);
-      const lp = getLogPath();
-      const logHint = lp ? `\n  Log: ${lp}` : '';
-      p.cancel(`Docker is not responding. Start Docker Desktop and try again.${logHint}`);
-      process.exit(1);
-    }
-  }
-
+  // ── 8.6 Download manifest ──────────────────────────────────────────────────
   let speedMbps = 0;
   try {
     process.stdout.write(pc.dim('  Measuring download speed...'));
@@ -288,6 +261,53 @@ async function main() {
     }
   }
 
+  // ── 8.7 Docker install/repair (interactive — brew cask needs sudo) ──────────
+  if (needsDockerInstall) {
+    if (appState === 'orphaned' || appState === 'zombie') {
+      console.log(`\n${pc.yellow('⚠')}  Broken Docker installation detected — cleaning up and reinstalling.`);
+      console.log(pc.dim('   Homebrew may ask for your password.\n'));
+      cleanOrphanedDockerFiles();
+    } else {
+      console.log(`\n${pc.cyan('●')}  Installing Docker Desktop via Homebrew.`);
+      console.log(pc.dim('   You may be prompted for your password.\n'));
+    }
+    await installDocker();
+    // Re-check after install
+    dockerInstalled = await checkDocker();
+    appState = getDockerAppState();
+  }
+
+  // ── 9.1 Docker daemon wait with user guidance ────────────────────────────────
+  if (appState === 'ready' && !(await isDaemonRunning())) {
+    await launchDockerApp();
+    p.note(
+      [
+        'Docker Desktop is launching.',
+        '',
+        '  1.  Complete sign-in or registration in the Docker window.',
+        '  2.  Accept the license agreement if prompted.',
+        '  3.  Wait for the Docker menu-bar icon to show "Engine running".',
+        '',
+        'Press Enter below once Docker is fully started.',
+      ].join('\n'),
+      'Docker setup required'
+    );
+    const ready = await p.confirm({ message: 'Is Docker running and ready?' });
+    if (p.isCancel(ready) || !ready) {
+      p.cancel('Setup cancelled — restart once Docker is running.');
+      process.exit(0);
+    }
+    try {
+      await pollDaemonReady(30_000);
+    } catch (err) {
+      logError('Docker daemon poll timed out', err);
+      const lp = getLogPath();
+      const logHint = lp ? `\n  Log: ${lp}` : '';
+      p.cancel(`Docker is not responding. Start Docker Desktop and try again.${logHint}`);
+      process.exit(1);
+    }
+  }
+
   // Initialise session log (workspace may not exist yet — logger handles mkdir)
   const logFilePath = initLog();
   log('INFO', `Profile selected: ${profileKey as string}`);
@@ -304,26 +324,13 @@ async function main() {
         title: 'Checking Docker daemon...',
         task: async (_, task) => {
           log('INFO', 'Task 1 start: Docker check');
-          if (!dockerInstalled) {
-            const appState = getDockerAppState();
-            if (appState === 'missing') {
-              task.title = 'Installing Docker via Homebrew...';
-              log('INFO', 'Docker not found — starting Homebrew install');
-              await installDocker();
-              log('INFO', 'Docker installed via Homebrew');
-            } else if (appState === 'zombie' || appState === 'orphaned') {
-              task.title = 'Repairing Docker install (partial uninstall detected)...';
-              log('INFO', `${appState} Docker state detected — running brew reinstall`);
-              await installDocker({ reinstall: true });
-              log('INFO', 'Docker reinstalled via Homebrew');
-            }
-            // Fresh install or app exists but CLI not on PATH — launch Docker Desktop
-            // so it registers the `docker` CLI symlinks and starts the daemon.
+          if (!(await isDaemonRunning())) {
+            // Docker was installed in pre-flight but daemon isn't up yet
             task.title = 'Launching Docker Desktop...';
-            log('INFO', 'Launching Docker Desktop for first-time CLI setup');
+            log('INFO', 'Launching Docker Desktop');
             await launchDockerApp();
             await pollDaemonReady(60_000);
-            log('INFO', 'Docker daemon ready after first launch');
+            log('INFO', 'Docker daemon ready');
           }
           try {
             const { stdout } = await execa('docker', ['--version']);

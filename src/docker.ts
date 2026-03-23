@@ -45,17 +45,38 @@ export function isDockerAppInstalled(): boolean {
 
 /**
  * Install (or reinstall) Docker Desktop via Homebrew Cask.
- * Pass `reinstall: true` for zombie .app bundles left behind by a partial uninstall.
- * Captures output — does not bleed into Listr spinner.
+ * Pass `reinstall: true` for zombie/orphaned states left behind by a partial uninstall.
+ * Uses stdio: 'inherit' so the user sees brew progress and can respond to sudo prompts.
  */
 export async function installDocker(opts: { reinstall?: boolean } = {}): Promise<void> {
   const cmd = opts.reinstall ? 'reinstall' : 'install';
   try {
-    await execa('brew', [cmd, '--cask', 'docker'], { stdio: 'pipe', timeout: 600_000 });
+    await execa('brew', [cmd, '--cask', 'docker'], { stdio: 'inherit', timeout: 600_000 });
   } catch (err: unknown) {
     const stderr = (err as { stderr?: string }).stderr ?? '';
     const lastLine = stderr.trim().split('\n').pop() ?? `brew ${cmd} failed`;
     throw new Error(lastLine);
+  }
+}
+
+/**
+ * Remove stale brew cask metadata and leftover shell completions so a fresh
+ * `brew install` can succeed. Does not require sudo — only touches Homebrew-owned paths.
+ */
+export function cleanOrphanedDockerFiles(): void {
+  const paths = [
+    '/opt/homebrew/Caskroom/docker-desktop',
+    '/opt/homebrew/etc/bash_completion.d/docker',
+    '/opt/homebrew/etc/bash_completion.d/docker-compose',
+    '/opt/homebrew/share/fish/vendor_completions.d/docker.fish',
+    '/opt/homebrew/share/fish/vendor_completions.d/docker-compose.fish',
+    '/opt/homebrew/share/zsh/site-functions/_docker',
+    '/opt/homebrew/share/zsh/site-functions/_docker-compose',
+  ];
+  for (const p of paths) {
+    try {
+      execaSync('rm', ['-rf', p], { stdio: 'ignore' });
+    } catch { /* best-effort */ }
   }
 }
 
