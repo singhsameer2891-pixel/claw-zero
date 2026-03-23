@@ -1,6 +1,6 @@
 {
   "name": "claw-zero",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "Secure AI sandbox in one command — Docker-isolated OpenClaw agent with zero config",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,15 @@
   },
   "homepage": "https://github.com/singhsameer2891-pixel/claw-zero#readme",
   "license": "MIT",
-  "keywords": ["ai", "sandbox", "docker", "openclaw", "cli", "agent", "security"],
+  "keywords": [
+    "ai",
+    "sandbox",
+    "docker",
+    "openclaw",
+    "cli",
+    "agent",
+    "security"
+  ],
   "scripts": {
     "start": "tsx src/index.ts",
     "build": "tsc",
