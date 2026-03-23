@@ -60,11 +60,16 @@ export async function installDocker(opts: { reinstall?: boolean } = {}): Promise
 }
 
 /**
- * Remove stale brew cask metadata and leftover shell completions so a fresh
- * `brew install` can succeed. Does not require sudo — only touches Homebrew-owned paths.
+ * Remove ALL leftover Docker Desktop artifacts so a clean `brew install` can
+ * succeed. Covers: brew Caskroom metadata, shell completions, and root-owned
+ * symlinks in /usr/local that the cask creates.
+ *
+ * Must run in an interactive context — uses `sudo rm` (with stdio: 'inherit')
+ * for the root-owned paths so the user can provide their password.
  */
-export function cleanOrphanedDockerFiles(): void {
-  const paths = [
+export async function cleanOrphanedDockerFiles(): Promise<void> {
+  // 1. Brew-owned paths (no sudo needed)
+  const brewPaths = [
     '/opt/homebrew/Caskroom/docker-desktop',
     '/opt/homebrew/etc/bash_completion.d/docker',
     '/opt/homebrew/etc/bash_completion.d/docker-compose',
@@ -73,10 +78,27 @@ export function cleanOrphanedDockerFiles(): void {
     '/opt/homebrew/share/zsh/site-functions/_docker',
     '/opt/homebrew/share/zsh/site-functions/_docker-compose',
   ];
-  for (const p of paths) {
+  for (const fp of brewPaths) {
+    try { execaSync('rm', ['-rf', fp], { stdio: 'ignore' }); } catch { /* best-effort */ }
+  }
+
+  // 2. Root-owned symlinks created by the Docker cask (needs sudo)
+  //    Derived from `brew info --cask docker` artifact list.
+  const sudoPaths = [
+    '/usr/local/bin/docker',
+    '/usr/local/bin/kubectl.docker',
+    '/usr/local/bin/hub-tool',
+    '/usr/local/bin/docker-credential-desktop',
+    '/usr/local/bin/docker-credential-ecr-login',
+    '/usr/local/bin/docker-credential-osxkeychain',
+    '/usr/local/cli-plugins/docker-compose',
+  ];
+  // Filter to only paths that actually exist to avoid unnecessary sudo prompt
+  const existing = sudoPaths.filter((fp) => existsSync(fp));
+  if (existing.length > 0) {
     try {
-      execaSync('rm', ['-rf', p], { stdio: 'ignore' });
-    } catch { /* best-effort */ }
+      await execa('sudo', ['rm', '-f', ...existing], { stdio: 'inherit' });
+    } catch { /* best-effort — install may still succeed if these aren't blocking */ }
   }
 }
 

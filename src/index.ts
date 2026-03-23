@@ -263,14 +263,11 @@ async function main() {
 
   // ── 8.7 Docker install/repair (interactive — brew cask needs sudo) ──────────
   if (needsDockerInstall) {
-    if (appState === 'orphaned' || appState === 'zombie') {
-      console.log(`\n${pc.yellow('⚠')}  Broken Docker installation detected — cleaning up and reinstalling.`);
-      console.log(pc.dim('   Homebrew may ask for your password.\n'));
-      cleanOrphanedDockerFiles();
-    } else {
-      console.log(`\n${pc.cyan('●')}  Installing Docker Desktop via Homebrew.`);
-      console.log(pc.dim('   You may be prompted for your password.\n'));
-    }
+    console.log(`\n${pc.cyan('●')}  Installing Docker Desktop via Homebrew...`);
+    console.log(pc.dim('   You may be prompted for your password.\n'));
+    // Always clean leftover artifacts — root-owned symlinks in /usr/local/bin
+    // and stale Caskroom metadata can block `brew install` even in 'missing' state.
+    await cleanOrphanedDockerFiles();
     await installDocker();
     // Re-check after install
     dockerInstalled = await checkDocker();
